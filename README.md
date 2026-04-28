@@ -41,6 +41,12 @@ This is intentionally narrow. Do not add onboarding, salary benchmarking, job bo
 
 ## Current MVP Checklist
 
+Checklist meaning:
+
+- `[x]` means implemented enough to see in the current demo.
+- Items marked `currently mock data` are not real AI/Supabase-backed yet.
+- `[ ]` means not implemented or not connected to real persistence/AI yet.
+
 ### 1. Job Setup
 
 Manager enters:
@@ -57,7 +63,7 @@ AI outputs:
 - [x] Evaluation rubric, currently mock data
 - [x] Interview categories, currently mock data
 - [ ] Replace mock rubric generation with OpenAI
-- [ ] Save generated rubric JSON into `jobs.ai_job_output`
+- [ ] Save real generated rubric JSON into `jobs.ai_job_output`
 
 ### 2. Candidate Upload
 
@@ -69,10 +75,10 @@ Manager uploads or enters:
 
 AI outputs:
 
-- [x] Extracted candidate profile, currently mock data
-- [x] Skill match, currently mock data
-- [x] Missing requirements, currently mock data
-- [x] Suggested screening questions, currently mock data
+- [x] Extracted candidate profile is visible, currently mock data
+- [x] Skill match is visible, currently mock data
+- [x] Missing requirements are visible, currently mock data
+- [x] Suggested screening questions exist in mock data
 - [ ] Add real candidate creation form
 - [ ] Add Supabase Storage upload to `candidate-resumes`
 - [ ] Extract resume text
@@ -83,11 +89,11 @@ AI outputs:
 
 Show:
 
-- [x] Match score
-- [x] Strengths
-- [x] Risks / concerns
-- [x] Evidence found
-- [x] Things to verify in interview
+- [x] Match score, currently mock data
+- [x] Strengths, currently mock data
+- [x] Risks / concerns, currently mock data
+- [x] Evidence found, currently mock data
+- [x] Things to verify in interview, currently mock data
 - [ ] Load scorecard from Supabase instead of mock data
 
 ### 4. Live Interview Copilot
