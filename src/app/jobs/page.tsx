@@ -4,6 +4,7 @@ import { CalendarDays, MapPin, Pencil, Plus, Sparkles } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { DeleteJobButton } from "./delete-job-button";
 
 type SavedJob = {
   id: string;
@@ -97,13 +98,16 @@ export default async function JobsPage() {
                     </div>
                     {summary ? <p className="mt-5 text-sm leading-6 text-ink/70">{summary}</p> : null}
                   </div>
-                  <Link
-                    href={`/jobs/${job.id}/edit`}
-                    className="inline-flex items-center justify-center rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Edit
-                  </Link>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/jobs/${job.id}/edit`}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </Link>
+                    <DeleteJobButton jobId={job.id} roleTitle={job.role_title} />
+                  </div>
                 </div>
 
                 <div className="mt-6 grid gap-4 lg:grid-cols-3">

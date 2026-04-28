@@ -71,3 +71,20 @@ export async function updateJob(formData: FormData) {
 
   redirect("/jobs");
 }
+
+export async function deleteJob(formData: FormData) {
+  const supabase = createServerSupabaseClient();
+  const jobId = String(formData.get("job_id") ?? "").trim();
+
+  if (!jobId) {
+    throw new Error("Job id is required.");
+  }
+
+  const { error } = await supabase.from("jobs").delete().eq("id", jobId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  redirect("/jobs");
+}
