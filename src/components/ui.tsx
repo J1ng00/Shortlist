@@ -29,7 +29,7 @@ export function ButtonLink({
   return (
     <Link
       className={cn(
-        "inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-bold transition",
+        "inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition",
         variant === "primary"
           ? "bg-ink text-paper hover:bg-moss"
           : "border border-ink/20 bg-paper text-ink hover:border-ink/30"

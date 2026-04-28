@@ -19,7 +19,7 @@ export function PageShell({ eyebrow, title, description, actions, children }: Pa
               AI Hiring Copilot
             </Link>
             <div className="flex gap-3 text-ink/60">
-              <Link className="hover:text-ink" href="/jobs/new">
+              <Link className="hover:text-ink" href="/jobs">
                 Job
               </Link>
               <Link className="hover:text-ink" href="/candidates/cand-maya">

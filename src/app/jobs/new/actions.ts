@@ -2,40 +2,28 @@
 
 import { redirect } from "next/navigation";
 
+import { generateJobKit, jobInputFromFormData, parseJobOutput } from "@/lib/job-ai";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-
-function lines(value: FormDataEntryValue | null) {
-  return String(value ?? "")
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
 
 export async function createJob(formData: FormData) {
   const supabase = createServerSupabaseClient();
+  const jobInput = jobInputFromFormData(formData);
 
-  const roleTitle = String(formData.get("role_title") ?? "").trim();
-  const businessName = String(formData.get("business_name") ?? "").trim();
-
-  if (!roleTitle || !businessName) {
+  if (!jobInput.role_title || !jobInput.business_name) {
     throw new Error("Role title and business name are required.");
   }
 
-  const aiJobOutput = {
-    job_description: String(formData.get("generated_job_description") ?? "").trim(),
-    evaluation_rubric: [],
-    interview_categories: lines(formData.get("interview_categories"))
-  };
+  const aiJobOutput = parseJobOutput(formData.get("ai_job_output")) ?? (await generateJobKit(jobInput));
 
   const { error } = await supabase.from("jobs").insert({
-    role_title: roleTitle,
-    business_name: businessName,
-    location: String(formData.get("location") ?? "").trim(),
-    work_type: String(formData.get("work_type") ?? "").trim(),
-    company_values: lines(formData.get("company_values")),
-    must_have_skills: lines(formData.get("must_have_skills")),
-    nice_to_have_skills: lines(formData.get("nice_to_have_skills")),
-    interview_focus: lines(formData.get("interview_focus")),
+    role_title: jobInput.role_title,
+    business_name: jobInput.business_name,
+    location: jobInput.location,
+    work_type: jobInput.work_type,
+    company_values: jobInput.company_values,
+    must_have_skills: jobInput.must_have_skills,
+    nice_to_have_skills: jobInput.nice_to_have_skills,
+    interview_focus: jobInput.interview_focus,
     ai_job_output: aiJobOutput
   });
 
@@ -43,5 +31,43 @@ export async function createJob(formData: FormData) {
     throw new Error(error.message);
   }
 
-  redirect("/candidates/cand-maya");
+  redirect("/jobs");
+}
+
+export async function updateJob(formData: FormData) {
+  const supabase = createServerSupabaseClient();
+  const jobInput = jobInputFromFormData(formData);
+  const jobId = String(formData.get("job_id") ?? "").trim();
+
+  if (!jobId) {
+    throw new Error("Job id is required.");
+  }
+
+  if (!jobInput.role_title || !jobInput.business_name) {
+    throw new Error("Role title and business name are required.");
+  }
+
+  const aiJobOutput = parseJobOutput(formData.get("ai_job_output")) ?? (await generateJobKit(jobInput));
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({
+      role_title: jobInput.role_title,
+      business_name: jobInput.business_name,
+      location: jobInput.location,
+      work_type: jobInput.work_type,
+      company_values: jobInput.company_values,
+      must_have_skills: jobInput.must_have_skills,
+      nice_to_have_skills: jobInput.nice_to_have_skills,
+      interview_focus: jobInput.interview_focus,
+      ai_job_output: aiJobOutput,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", jobId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  redirect("/jobs");
 }
