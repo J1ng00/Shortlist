@@ -9,14 +9,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#17201b",
-        moss: "#46624a",
-        sand: "#f5efe3",
-        paper: "#fffbf3",
-        clay: "#c76f4b"
+        ink: "#3C578F",
+        navy: "#223155",
+        moss: "#9FBAF2",
+        sand: "#FDFDF5",
+        paper: "#FDFDF5",
+        clay: "#EAF3B2",
+        line: "#D9E2F6"
       },
       boxShadow: {
-        soft: "0 18px 45px rgba(23, 32, 27, 0.10)"
+        soft: "0 16px 40px rgba(34, 49, 85, 0.10)",
+        panel: "0 1px 2px rgba(34, 49, 85, 0.06), 0 12px 28px rgba(34, 49, 85, 0.08)"
       }
     }
   },
