@@ -31,6 +31,8 @@ export async function createJob(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
+
+  redirect("/jobs");
 }
 
 export async function updateJob(formData: FormData) {
