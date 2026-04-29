@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { generateJobKit, jobInputFromFormData } from "@/lib/job-ai";
+import { generateJobKit, jobInputFromFormData, parseJobOutput } from "@/lib/job-ai";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function createJob(formData: FormData) {
@@ -14,7 +14,7 @@ export async function createJob(formData: FormData) {
     throw new Error("Role title and business name are required.");
   }
 
-  const aiJobOutput = await generateJobKit(jobInput);
+  const aiJobOutput = parseJobOutput(formData.get("ai_job_output")) ?? await generateJobKit(jobInput);
 
   const { data, error } = await supabase.from("jobs").insert({
     role_title: jobInput.role_title,
@@ -32,7 +32,7 @@ export async function createJob(formData: FormData) {
     throw new Error(error.message);
   }
 
-  redirect(`/apply/${data.id}`);
+  redirect(`/jobs/${data.id}/preview`);
 }
 
 export async function updateJob(formData: FormData) {
@@ -48,7 +48,7 @@ export async function updateJob(formData: FormData) {
     throw new Error("Role title and business name are required.");
   }
 
-  const aiJobOutput = await generateJobKit(jobInput);
+  const aiJobOutput = parseJobOutput(formData.get("ai_job_output")) ?? await generateJobKit(jobInput);
 
   const { error } = await supabase
     .from("jobs")

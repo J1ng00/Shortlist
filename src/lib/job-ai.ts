@@ -1,4 +1,4 @@
-import { jobGenerationContract } from "@/lib/ai-json-contracts";
+import { jobGenerationContract, jobProfileDraftContract } from "@/lib/ai-json-contracts";
 
 export type JobGenerationInput = {
   business_name: string;
@@ -19,6 +19,14 @@ export type JobGenerationOutput = {
     evidence_to_look_for: string;
   }>;
   interview_categories: string[];
+};
+
+export type JobProfileDraft = {
+  company_values: string[];
+  must_have_skills: string[];
+  nice_to_have_skills: string[];
+  interview_focus: string[];
+  job_output: JobGenerationOutput;
 };
 
 export function linesFromValue(value: FormDataEntryValue | null) {
@@ -136,13 +144,94 @@ export async function generateJobKit(input: JobGenerationInput): Promise<JobGene
   return fallbackJobKit(input);
 }
 
+export async function generateJobProfileDraft(input: Pick<JobGenerationInput, "business_name" | "role_title" | "location" | "work_type">): Promise<JobProfileDraft> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return fallbackJobProfileDraft(input);
+  }
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+          temperature: 0.35,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "You draft concise, practical hiring inputs for small business managers. Return only valid JSON matching the requested contract."
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                task:
+                  "Given a business name and role title, infer a sensible first draft for company values, must-have skills, nice-to-have skills, interview focus, and a job kit. Keep each list specific and short.",
+                contract: jobProfileDraftContract,
+                input
+              })
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        if (!shouldRetryOpenAi(response.status) || attempt === 3) {
+          if (shouldRetryOpenAi(response.status)) {
+            return fallbackJobProfileDraft(input);
+          }
+
+          throw new Error(`OpenAI job profile draft failed: ${errorText}`);
+        }
+
+        await wait(attempt * 800);
+        continue;
+      }
+
+      const data = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        return fallbackJobProfileDraft(input);
+      }
+
+      return normalizeJobProfileDraft(JSON.parse(content), input);
+    } catch (error) {
+      if (attempt === 3) {
+        if (
+          error instanceof SyntaxError ||
+          !(error instanceof Error) ||
+          !error.message.startsWith("OpenAI job profile draft failed:")
+        ) {
+          return fallbackJobProfileDraft(input);
+        }
+
+        throw error;
+      }
+
+      await wait(attempt * 800);
+    }
+  }
+
+  return fallbackJobProfileDraft(input);
+}
+
 function normalizeJobOutput(value: unknown): JobGenerationOutput {
   const output = value as Partial<JobGenerationOutput>;
-
-  return {
-    job_description: String(output.job_description ?? "").trim(),
-    evaluation_rubric: Array.isArray(output.evaluation_rubric)
-      ? output.evaluation_rubric.map((item) => {
+  const evaluationRubric = Array.isArray(output.evaluation_rubric)
+    ? output.evaluation_rubric
+        .map((item) => {
           const rubricItem = item as Partial<JobGenerationOutput["evaluation_rubric"][number]>;
 
           return {
@@ -151,10 +240,47 @@ function normalizeJobOutput(value: unknown): JobGenerationOutput {
             evidence_to_look_for: String(rubricItem.evidence_to_look_for ?? "").trim()
           };
         })
-      : [],
+        .filter((item) => item.category || item.evidence_to_look_for)
+    : [];
+
+  return {
+    job_description: String(output.job_description ?? "").trim(),
+    evaluation_rubric: normalizeRubricWeights(evaluationRubric),
     interview_categories: Array.isArray(output.interview_categories)
       ? output.interview_categories.map((item) => String(item).trim()).filter(Boolean)
       : []
+  };
+}
+
+function normalizeStringList(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : [];
+}
+
+function normalizeJobProfileDraft(value: unknown, input: Pick<JobGenerationInput, "business_name" | "role_title" | "location" | "work_type">): JobProfileDraft {
+  const draft = value as Partial<JobProfileDraft>;
+  const normalizedInput = {
+    ...input,
+    company_values: normalizeStringList(draft.company_values),
+    must_have_skills: normalizeStringList(draft.must_have_skills),
+    nice_to_have_skills: normalizeStringList(draft.nice_to_have_skills),
+    interview_focus: normalizeStringList(draft.interview_focus)
+  };
+
+  if (
+    !normalizedInput.company_values.length ||
+    !normalizedInput.must_have_skills.length ||
+    !normalizedInput.nice_to_have_skills.length ||
+    !normalizedInput.interview_focus.length
+  ) {
+    return fallbackJobProfileDraft(input);
+  }
+
+  return {
+    company_values: normalizedInput.company_values,
+    must_have_skills: normalizedInput.must_have_skills,
+    nice_to_have_skills: normalizedInput.nice_to_have_skills,
+    interview_focus: normalizedInput.interview_focus,
+    job_output: draft.job_output ? normalizeJobOutput(draft.job_output) : fallbackJobKit(normalizedInput)
   };
 }
 
@@ -164,6 +290,52 @@ function shouldRetryOpenAi(status: number) {
 
 function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function normalizeRubricWeights(rubric: JobGenerationOutput["evaluation_rubric"]) {
+  if (!rubric.length) {
+    return [];
+  }
+
+  if (rubric.length === 1) {
+    return [{ ...rubric[0], weight: 100 }];
+  }
+
+  const total = rubric.reduce((sum, item) => sum + Math.max(0, Number(item.weight) || 0), 0);
+
+  if (total <= 0) {
+    const base = Math.floor(100 / rubric.length);
+    let remainder = 100 - base * rubric.length;
+
+    return rubric.map((item) => ({
+      ...item,
+      weight: base + (remainder-- > 0 ? 1 : 0)
+    }));
+  }
+
+  const scaled = rubric.map((item) => {
+    const exact = (Math.max(0, Number(item.weight) || 0) / total) * 100;
+
+    return {
+      item,
+      floor: Math.floor(exact),
+      remainder: exact - Math.floor(exact)
+    };
+  });
+  let remaining = 100 - scaled.reduce((sum, item) => sum + item.floor, 0);
+  const byRemainder = [...scaled].sort((a, b) => b.remainder - a.remainder);
+
+  byRemainder.forEach((item) => {
+    if (remaining > 0) {
+      item.floor += 1;
+      remaining -= 1;
+    }
+  });
+
+  return scaled.map(({ item, floor }) => ({
+    ...item,
+    weight: floor
+  }));
 }
 
 function fallbackJobKit(input: JobGenerationInput): JobGenerationOutput {
@@ -209,5 +381,28 @@ function fallbackJobKit(input: JobGenerationInput): JobGenerationOutput {
     }. The role should be assessed against the must-have skills, company values, and interview focus areas captured in the job setup.`,
     evaluation_rubric: fallbackRubric,
     interview_categories: focus.length ? focus : ["Role capability", "Working style", "Values alignment"]
+  };
+}
+
+function fallbackJobProfileDraft(input: Pick<JobGenerationInput, "business_name" | "role_title" | "location" | "work_type">): JobProfileDraft {
+  const role = input.role_title || "this role";
+  const draftInput: JobGenerationInput = {
+    ...input,
+    company_values: ["Clear communication", "Reliable ownership", "Practical problem solving"],
+    must_have_skills: [
+      `Relevant experience in ${role}`,
+      "Clear written and verbal communication",
+      "Ability to manage priorities with limited supervision"
+    ],
+    nice_to_have_skills: ["Small business or startup experience", "Comfort with digital tools and process improvement"],
+    interview_focus: ["Role-specific capability", "Ownership and prioritisation", "Working style alignment"]
+  };
+
+  return {
+    company_values: draftInput.company_values,
+    must_have_skills: draftInput.must_have_skills,
+    nice_to_have_skills: draftInput.nice_to_have_skills,
+    interview_focus: draftInput.interview_focus,
+    job_output: fallbackJobKit(draftInput)
   };
 }

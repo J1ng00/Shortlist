@@ -100,3 +100,5 @@ on storage.objects for update
 to anon
 using (bucket_id = 'candidate-resumes')
 with check (bucket_id = 'candidate-resumes');
+
+

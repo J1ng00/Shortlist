@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 type PageHeadingProps = {
   eyebrow?: string;
   title: string;
-  description: string;
+  description: ReactNode;
   actions?: ReactNode;
 };
 

@@ -10,6 +10,14 @@ export const jobGenerationContract = {
   interview_categories: ["string"]
 };
 
+export const jobProfileDraftContract = {
+  company_values: ["string"],
+  must_have_skills: ["string"],
+  nice_to_have_skills: ["string"],
+  interview_focus: ["string"],
+  job_output: jobGenerationContract
+};
+
 export const candidateAnalysisContract = {
   summary: "string",
   extracted_skills: ["string"],

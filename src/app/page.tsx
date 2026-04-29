@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BriefcaseBusiness, FileText, MessageSquareText, Search, Stamp } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, ClipboardList, FileText, MessageSquareText, Search, Stamp } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
@@ -58,6 +58,12 @@ const flow = [
     icon: BriefcaseBusiness,
   },
   {
+    title: "Saved job profiles",
+    description: "Review saved roles, open application forms, and manage job cards.",
+    href: "/jobs",
+    icon: ClipboardList,
+  },
+  {
     title: "Review pipeline",
     description: "Search applicants, compare fit scores, and open candidate summaries.",
     href: "/candidates",
@@ -91,9 +97,6 @@ export default async function Home() {
   ]);
   const recentCandidates = (candidates ?? []) as unknown as RecentCandidate[];
   const readyCount = recentCandidates.filter((candidate) => candidate.ai_candidate_output?.status === "ready").length;
-  const averageScore = recentCandidates.length
-    ? Math.round(recentCandidates.reduce((total, candidate) => total + (candidateScore(candidate) ?? 0), 0) / recentCandidates.length)
-    : 0;
 
   return (
     <PageShell
@@ -107,7 +110,7 @@ export default async function Home() {
         </>
       }
     >
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card className="rounded-2xl">
           <p className="text-sm font-bold text-navy/60">Open roles</p>
           <p className="mt-2 text-3xl font-black text-ink">{jobCount ?? 0}</p>
@@ -115,10 +118,6 @@ export default async function Home() {
         <Card className="rounded-2xl">
           <p className="text-sm font-bold text-navy/60">Recent applicants</p>
           <p className="mt-2 text-3xl font-black text-ink">{recentCandidates.length}</p>
-        </Card>
-        <Card className="rounded-2xl">
-          <p className="text-sm font-bold text-navy/60">Average fit</p>
-          <p className="mt-2 text-3xl font-black text-ink">{averageScore}/100</p>
         </Card>
       </div>
 

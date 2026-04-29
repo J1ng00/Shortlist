@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CandidateUploadForm } from "@/components/candidates/candidate-upload-form";
@@ -46,6 +47,12 @@ export default async function ApplyPage({ params }: ApplyPageProps) {
           <p className="mt-6 max-w-xl text-sm leading-7 text-navy/70">
             Upload your resume and add any profile links you want the hiring team to review with your application.
           </p>
+          <Link
+            className="mt-6 inline-flex items-center justify-center rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/40"
+            href="/jobs"
+          >
+            Back to saved job profiles
+          </Link>
         </section>
 
         <section className="rounded-2xl border border-ink/10 bg-paper p-5 shadow-soft sm:p-6">
