@@ -16,7 +16,7 @@ export async function createJob(formData: FormData) {
 
   const aiJobOutput = await generateJobKit(jobInput);
 
-  const { error } = await supabase.from("jobs").insert({
+  const { data, error } = await supabase.from("jobs").insert({
     role_title: jobInput.role_title,
     business_name: jobInput.business_name,
     location: jobInput.location,
@@ -26,13 +26,13 @@ export async function createJob(formData: FormData) {
     nice_to_have_skills: jobInput.nice_to_have_skills,
     interview_focus: jobInput.interview_focus,
     ai_job_output: aiJobOutput
-  });
+  }).select("id").single();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  redirect("/jobs");
+  redirect(`/jobs/${data.id}/upload`);
 }
 
 export async function updateJob(formData: FormData) {

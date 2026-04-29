@@ -10,9 +10,9 @@ export default async function UploadCandidatePage({ params }: Props) {
 
   return (
     <PageShell
-      eyebrow="Step 1"
-      title="Upload candidate"
-      description="Upload a resume and optional links to generate an AI candidate summary."
+      eyebrow="Candidate upload"
+      title="Create candidate"
+      description="Upload a resume PDF and add optional profile links or notes. The candidate profile, skill match, gaps, and screening questions are generated after upload."
     >
       <CandidateUploadForm jobId={jobId} />
     </PageShell>

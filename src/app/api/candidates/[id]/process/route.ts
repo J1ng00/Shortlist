@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { extractPdfText } from "@/lib/pdf/extract-text";
-import { extractCandidateProfile } from "../../../../../lib/ai/extract-candidate";
+import { extractCandidateProfile } from "@/lib/ai/extract-candidate";
 import { evaluateCandidate } from "@/lib/ai/evaluate-candidate";
 
 type RouteContext = {
@@ -14,7 +14,10 @@ export async function POST(_: Request, context: RouteContext) {
 
   await supabaseAdmin
     .from("candidates")
-    .update({ status: "processing" })
+    .update({
+      ai_candidate_output: { status: "processing" },
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id);
 
   const { data: candidate, error: candidateError } = await supabaseAdmin
@@ -28,13 +31,19 @@ export async function POST(_: Request, context: RouteContext) {
   }
 
   const { data: file, error: fileError } = await supabaseAdmin.storage
-    .from("candidate-files")
-    .download(candidate.resume_path);
+    .from("candidate-resumes")
+    .download(candidate.resume_file_path);
 
   if (fileError || !file) {
     await supabaseAdmin
       .from("candidates")
-      .update({ status: "failed" })
+      .update({
+        ai_candidate_output: {
+          status: "failed",
+          error: "Resume file missing",
+        },
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
 
     return NextResponse.json({ error: "Resume file missing" }, { status: 500 });
@@ -49,22 +58,27 @@ export async function POST(_: Request, context: RouteContext) {
       githubUrl: candidate.github_url,
       linkedinUrl: candidate.linkedin_url,
       manualProfileNotes: candidate.manual_profile_notes,
-      jobTitle: candidate.jobs.title,
+      jobTitle: candidate.jobs.role_title,
       companyName: candidate.jobs.business_name,
     });
 
     const evaluation = await evaluateCandidate({
       job: {
-        title: candidate.jobs.title,
+        title: candidate.jobs.role_title,
         businessName: candidate.jobs.business_name,
-        requirements: candidate.jobs.requirements,
-        description: candidate.jobs.description,
+        requirements: {
+          mustHaveSkills: candidate.jobs.must_have_skills,
+          niceToHaveSkills: candidate.jobs.nice_to_have_skills,
+          interviewFocus: candidate.jobs.interview_focus,
+          companyValues: candidate.jobs.company_values,
+        },
+        description: candidate.jobs.ai_job_output?.job_description ?? null,
       },
       extractedProfile,
     });
 
-    await supabaseAdmin.from("candidate_ai_results").upsert({
-      candidate_id: id,
+    const aiCandidateOutput = {
+      status: "ready",
       extracted_profile: extractedProfile,
       extracted_skills: extractedProfile.extractedSkills,
       strengths: evaluation.strengths,
@@ -73,22 +87,23 @@ export async function POST(_: Request, context: RouteContext) {
       suggested_screening_questions: evaluation.suggestedScreeningQuestions,
       ai_summary: evaluation.aiSummary,
       skill_match: evaluation.skillMatch,
+      initial_fit_score: evaluation.fitScore,
       raw_model_output: {
         extractedProfile,
         evaluation,
       },
       updated_at: new Date().toISOString(),
-    });
+    };
 
     await supabaseAdmin
       .from("candidates")
       .update({
-        name: extractedProfile.fullName,
-        current_role: extractedProfile.currentRole,
-        location: extractedProfile.location,
-        experience_years: extractedProfile.experienceYears,
-        fit_score: evaluation.fitScore,
-        status: "ready",
+        full_name: extractedProfile.fullName || candidate.full_name,
+        email: extractedProfile.email || candidate.email,
+        current_position: extractedProfile.currentRole || candidate.current_position,
+        resume_text: resumeText,
+        initial_fit_score: evaluation.fitScore,
+        ai_candidate_output: aiCandidateOutput,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
@@ -99,7 +114,13 @@ export async function POST(_: Request, context: RouteContext) {
   } catch (error) {
     await supabaseAdmin
       .from("candidates")
-      .update({ status: "failed" })
+      .update({
+        ai_candidate_output: {
+          status: "failed",
+          error: error instanceof Error ? error.message : "Unknown processing error",
+        },
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
 
     return NextResponse.json(

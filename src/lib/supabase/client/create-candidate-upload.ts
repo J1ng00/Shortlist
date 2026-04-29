@@ -4,6 +4,10 @@ export async function createCandidateUpload(payload: {
   githubUrl?: string;
   linkedinUrl?: string;
   manualProfileNotes?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  currentPosition?: string;
 }) {
   const res = await fetch("/api/candidates", {
     method: "POST",
@@ -15,11 +19,16 @@ export async function createCandidateUpload(payload: {
       githubUrl: payload.githubUrl,
       linkedinUrl: payload.linkedinUrl,
       manualProfileNotes: payload.manualProfileNotes,
+      fullName: payload.fullName,
+      email: payload.email,
+      phone: payload.phone,
+      currentPosition: payload.currentPosition,
     }),
   });
 
   if (!res.ok) {
-    throw new Error("Failed to create candidate upload");
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? "Failed to create candidate upload");
   }
 
   const data = await res.json();
@@ -41,7 +50,8 @@ export async function createCandidateUpload(payload: {
   });
 
   if (!processRes.ok) {
-    throw new Error("Failed to process candidate");
+    const data = await processRes.json().catch(() => null);
+    throw new Error(data?.error ?? "Failed to process candidate");
   }
 
   return data.candidateId;
