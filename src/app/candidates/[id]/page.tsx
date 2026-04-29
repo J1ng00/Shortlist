@@ -2,6 +2,7 @@ import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, FitScore, Pill } from "@/components/ui";
 import { getCandidate, getJob } from "@/lib/mock-data";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { analyzeCandidate } from "./actions";
 
 type CandidatePageProps = {
   params: Promise<{
@@ -79,6 +80,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
     const missingRequirements = output.missing_requirements ?? [];
     const areasToValidate = output.areas_to_validate ?? [];
     const fitScore = candidate.initial_fit_score ?? 0;
+    const hasAnalysis = Boolean(candidate.initial_fit_score || output.summary);
     const jobTitle = candidate.jobs?.role_title ?? "the selected role";
     const businessName = candidate.jobs?.business_name ?? "the business";
 
@@ -87,7 +89,20 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
         eyebrow="Step 2"
         title={candidate.full_name}
         description={`Candidate review for ${jobTitle} at ${businessName}. The resume is stored in Supabase and ready for analysis.`}
-        actions={<ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>}
+        actions={
+          <>
+            <form action={analyzeCandidate}>
+              <input type="hidden" name="candidate_id" value={candidate.id} />
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss"
+                type="submit"
+              >
+                {hasAnalysis ? "Refresh analysis" : "Analyze CV"}
+              </button>
+            </form>
+            <ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>
+          </>
+        }
       >
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
           <div className="space-y-6">
@@ -133,7 +148,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-2xl font-black">AI candidate summary</h2>
-                <Pill>Pending analysis</Pill>
+                <Pill>{hasAnalysis ? "OpenAI analysis" : "Pending analysis"}</Pill>
               </div>
               <p className="mt-5 text-base leading-8 text-ink/75">
                 {output.summary ??

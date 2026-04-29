@@ -13,3 +13,7 @@
  ✓ Compiled /candidates/new in 4.8s (760 modules)
  ✓ Compiled in 880ms (250 modules)
  GET /candidates/new 200 in 7189ms
+ ✓ Compiled in 169ms (236 modules)
+ ✓ Compiled in 164ms (250 modules)
+ ✓ Compiled in 106ms (250 modules)
+ ✓ Compiled in 132ms (250 modules)

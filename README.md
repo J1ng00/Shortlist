@@ -32,6 +32,7 @@ This is intentionally narrow. Do not add onboarding, salary benchmarking, job bo
 - Supabase connection has been verified through the health route.
 - Job creation form at `/jobs/new` now inserts into the Supabase `jobs` table.
 - Candidate upload form at `/candidates/new` inserts into the Supabase `candidates` table and uploads PDFs to Supabase Storage.
+- Candidate review pages can extract uploaded resume text, call OpenAI for structured analysis, and save the result to `candidates.ai_candidate_output`.
 - Mock API routes exist for the 4 AI flows plus resume upload:
   - `POST /api/jobs/generate`
   - `POST /api/candidates/analyze`
@@ -82,9 +83,9 @@ AI outputs:
 - [x] Suggested screening questions exist in mock data
 - [x] Add real candidate creation form
 - [x] Add Supabase Storage upload to `candidate-resumes`
-- [ ] Extract resume text
-- [ ] Replace mock candidate analysis with OpenAI
-- [ ] Save candidate analysis JSON into `candidates.ai_candidate_output`
+- [x] Extract resume text
+- [x] Replace mock candidate analysis with OpenAI
+- [x] Save candidate analysis JSON into `candidates.ai_candidate_output`
 
 ### 3. Pre-Interview Scorecard
 
@@ -330,6 +331,15 @@ Recommended order:
 ```bash
 npm install
 npm run dev
+```
+
+Required local environment variables:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.4-mini
 ```
 
 Check Supabase connection:

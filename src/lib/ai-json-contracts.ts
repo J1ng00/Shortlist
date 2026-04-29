@@ -11,6 +11,7 @@ export const jobGenerationContract = {
 };
 
 export const candidateAnalysisContract = {
+  summary: "string",
   extracted_skills: ["string"],
   strengths: ["string"],
   missing_requirements: ["string"],
