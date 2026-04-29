@@ -35,6 +35,7 @@ create table public.candidates (
   github_url text,
   linkedin_url text,
   profile_notes text,
+  manual_profile_notes text,
   resume_file_path text,
   resume_text text,
   ai_candidate_output jsonb not null default '{}'::jsonb,
@@ -48,7 +49,7 @@ comment on column public.candidates.resume_file_path is
   'Path inside Supabase Storage bucket candidate-resumes.';
 
 comment on column public.candidates.ai_candidate_output is
-  'JSON shape: { extracted_skills, strengths, missing_requirements, areas_to_validate, initial_fit_score, suggested_interview_questions }';
+  'JSON shape: { status, extracted_profile, extracted_skills, strengths, missing_requirements, areas_to_validate, skill_match, initial_fit_score, suggested_screening_questions }';
 
 create table public.interview_sessions (
   id uuid primary key default gen_random_uuid(),

@@ -10,6 +10,8 @@ export async function POST(req: Request) {
     fileName,
     fileType,
     githubUrl,
+    linkedinUrl,
+    manualProfileNotes,
     fullName,
     email,
     phone,
@@ -36,7 +38,10 @@ export async function POST(req: Request) {
     phone: phone || null,
     current_position: currentPosition || null,
     github_url: githubUrl || null,
+    linkedin_url: linkedinUrl || null,
+    manual_profile_notes: manualProfileNotes || null,
     resume_file_path: storagePath,
+    ai_candidate_output: { status: "awaiting_resume_upload" },
     stage: "review",
   });
 

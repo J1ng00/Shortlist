@@ -15,6 +15,10 @@ export function CandidateUploadForm({ jobId }: Props) {
   const [githubUrl, setGithubUrl] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [manualProfileNotes, setManualProfileNotes] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [currentPosition, setCurrentPosition] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,6 +39,10 @@ export function CandidateUploadForm({ jobId }: Props) {
         githubUrl,
         linkedinUrl,
         manualProfileNotes,
+        fullName,
+        email,
+        phone,
+        currentPosition,
       });
 
       router.push(`/candidates/${candidateId}`);
@@ -47,6 +55,49 @@ export function CandidateUploadForm({ jobId }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-2 block text-sm font-bold text-ink">Candidate name</label>
+          <input
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
+            placeholder="Optional if resume has it"
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-bold text-ink">Current position</label>
+          <input
+            value={currentPosition}
+            onChange={(e) => setCurrentPosition(e.target.value)}
+            className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
+            placeholder="Optional"
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-bold text-ink">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
+            placeholder="Optional"
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-bold text-ink">Phone</label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
+            placeholder="Optional"
+          />
+        </div>
+      </div>
+
       <div>
         <label className="mb-2 block text-sm font-bold text-ink">Resume PDF</label>
         <input

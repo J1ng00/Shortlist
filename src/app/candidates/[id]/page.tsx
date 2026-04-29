@@ -1,11 +1,11 @@
-import { AlertTriangle, ArrowLeft, CheckCircle2, Github, MessageSquareText, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Github, Linkedin, MessageSquareText, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
 import { getCandidate, getJob } from "@/lib/mock-data";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { analyzeCandidate } from "./actions";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { Candidate, Job } from "@/lib/types";
 
 type CandidatePageProps = {
   params: Promise<{
@@ -13,227 +13,124 @@ type CandidatePageProps = {
   }>;
 };
 
-type SavedCandidate = {
-  id: string;
-  job_id: string;
-  full_name: string;
-  email: string | null;
-  phone: string | null;
-  current_position: string | null;
-  github_url: string | null;
-  linkedin_url: string | null;
-  profile_notes: string | null;
-  resume_file_path: string | null;
-  ai_candidate_output: {
+type CandidateAiOutput = {
+  status?: string;
+  extracted_profile?: {
+    fullName?: string;
+    currentRole?: string;
+    location?: string;
+    experienceYears?: number;
     summary?: string;
-    extracted_skills?: string[];
-    strengths?: string[];
-    missing_requirements?: string[];
-    areas_to_validate?: string[];
-    suggested_interview_questions?: string[];
+    extractedSkills?: string[];
   };
-  initial_fit_score: number | null;
-  jobs: {
-    role_title: string;
-    business_name: string;
-  } | null;
+  extracted_skills?: string[];
+  strengths?: string[];
+  missing_requirements?: string[];
+  areas_to_validate?: string[];
+  suggested_screening_questions?: Array<string | { question?: string; reason?: string }>;
+  ai_summary?: string;
+  skill_match?: {
+    matched?: string[];
+    partial?: string[];
+    missing?: string[];
+  };
+  initial_fit_score?: number;
 };
 
-type SavedCandidateRecord = Omit<SavedCandidate, "jobs"> & {
-  jobs:
-    | {
-        role_title: string;
-        business_name: string;
-      }
-    | Array<{
-        role_title: string;
-        business_name: string;
-      }>
-    | null;
-};
+function asStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function questionText(question: string | { question?: string; reason?: string }) {
+  if (typeof question === "string") {
+    return question;
+  }
+
+  return question.reason ? `${question.question ?? "Screening question"} - ${question.reason}` : question.question ?? "Screening question";
+}
+
+async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiStatus?: string; skillMatch?: CandidateAiOutput["skill_match"]; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
+  const { data } = await supabaseAdmin
+    .from("candidates")
+    .select("*, jobs(*)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!data?.jobs) {
+    const mockCandidate = getCandidate(id);
+    return {
+      candidate: mockCandidate,
+      job: getJob(mockCandidate.jobId),
+      source: "mock",
+    };
+  }
+
+  const output = (data.ai_candidate_output ?? {}) as CandidateAiOutput;
+  const profile = output.extracted_profile ?? {};
+  const jobOutput = data.jobs.ai_job_output ?? {};
+  const suggestedQuestions = output.suggested_screening_questions?.map(questionText) ?? [];
+  const fallbackSkills = [...asStringArray(data.jobs.must_have_skills), ...asStringArray(data.jobs.nice_to_have_skills)].slice(0, 6);
+
+  const candidate: Candidate = {
+    id: data.id,
+    jobId: data.job_id,
+    name: profile.fullName || data.full_name,
+    currentRole: profile.currentRole || data.current_position || "Role not extracted yet",
+    experienceYears: profile.experienceYears ?? 0,
+    location: profile.location || data.jobs.location || "Location not provided",
+    githubUrl: data.github_url ?? undefined,
+    fitScore: output.initial_fit_score ?? data.initial_fit_score ?? 0,
+    stage: data.stage,
+    extractedSkills: output.extracted_skills ?? profile.extractedSkills ?? fallbackSkills,
+    strengths: output.strengths ?? [],
+    missingRequirements: output.missing_requirements ?? [],
+    areasToValidate: output.areas_to_validate ?? [],
+    suggestedInterviewQuestions: suggestedQuestions,
+    aiSummary: output.ai_summary || profile.summary || "Candidate analysis is still processing.",
+  };
+
+  const job: Job = {
+    id: data.jobs.id,
+    title: data.jobs.role_title,
+    businessName: data.jobs.business_name,
+    location: data.jobs.location ?? "",
+    workType: data.jobs.work_type ?? "",
+    companyValues: asStringArray(data.jobs.company_values),
+    mustHaves: asStringArray(data.jobs.must_have_skills),
+    niceToHaves: asStringArray(data.jobs.nice_to_have_skills),
+    interviewFocus: asStringArray(data.jobs.interview_focus),
+    generatedJobDescription: jobOutput.job_description ?? "",
+    evaluationRubric: jobOutput.evaluation_rubric ?? [],
+    interviewCategories: jobOutput.interview_categories ?? [],
+  };
+
+  return {
+    candidate,
+    job,
+    aiStatus: output.status,
+    skillMatch: output.skill_match,
+    linkedinUrl: data.linkedin_url,
+    source: "supabase",
+  };
+}
 
 export default async function CandidatePage({ params }: CandidatePageProps) {
   const { id } = await params;
-  const isSavedCandidate = uuidPattern.test(id);
-
-  if (isSavedCandidate) {
-    const supabase = createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("candidates")
-      .select(
-        "id, job_id, full_name, email, phone, current_position, github_url, linkedin_url, profile_notes, resume_file_path, ai_candidate_output, initial_fit_score, jobs(role_title, business_name)"
-      )
-      .eq("id", id)
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    const record = data as unknown as SavedCandidateRecord;
-    const candidate: SavedCandidate = {
-      ...record,
-      jobs: Array.isArray(record.jobs) ? record.jobs[0] ?? null : record.jobs
-    };
-    const output = candidate.ai_candidate_output ?? {};
-    const extractedSkills = output.extracted_skills ?? [];
-    const strengths = output.strengths ?? [];
-    const missingRequirements = output.missing_requirements ?? [];
-    const areasToValidate = output.areas_to_validate ?? [];
-    const fitScore = candidate.initial_fit_score ?? 0;
-    const hasAnalysis = Boolean(candidate.initial_fit_score || output.summary);
-    const jobTitle = candidate.jobs?.role_title ?? "the selected role";
-    const businessName = candidate.jobs?.business_name ?? "the business";
-
-    return (
-      <PageShell
-        eyebrow="Step 2"
-        title={candidate.full_name}
-        description={`Candidate review for ${jobTitle} at ${businessName}. The resume is stored in Supabase and ready for analysis.`}
-        actions={
-          <>
-            <form action={analyzeCandidate}>
-              <input type="hidden" name="candidate_id" value={candidate.id} />
-              <button
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss"
-                type="submit"
-              >
-                {hasAnalysis ? "Refresh analysis" : "Analyze CV"}
-              </button>
-            </form>
-            <ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>
-          </>
-        }
-      >
-        <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <div className="space-y-6">
-            <FitScore score={fitScore} />
-            <Card>
-              <p className="text-sm font-bold text-ink/60">Candidate profile</p>
-              <div className="mt-4 space-y-3 text-sm text-ink/70">
-                {candidate.current_position ? (
-                  <p>
-                    <strong className="text-ink">Current role:</strong> {candidate.current_position}
-                  </p>
-                ) : null}
-                {candidate.email ? (
-                  <p>
-                    <strong className="text-ink">Email:</strong> {candidate.email}
-                  </p>
-                ) : null}
-                {candidate.phone ? (
-                  <p>
-                    <strong className="text-ink">Phone:</strong> {candidate.phone}
-                  </p>
-                ) : null}
-                {candidate.github_url ? (
-                  <p>
-                    <strong className="text-ink">GitHub:</strong> {candidate.github_url}
-                  </p>
-                ) : null}
-                {candidate.linkedin_url ? (
-                  <p>
-                    <strong className="text-ink">LinkedIn:</strong> {candidate.linkedin_url}
-                  </p>
-                ) : null}
-                {candidate.resume_file_path ? (
-                  <p>
-                    <strong className="text-ink">CV path:</strong> {candidate.resume_file_path}
-                  </p>
-                ) : null}
-              </div>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            <Card>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-2xl font-black">AI candidate summary</h2>
-                <Pill>{hasAnalysis ? "OpenAI analysis" : "Pending analysis"}</Pill>
-              </div>
-              <p className="mt-5 text-base leading-8 text-ink/75">
-                {output.summary ??
-                  "The CV upload is saved. Connect resume text extraction and candidate analysis to replace this pending state with an AI-generated scorecard."}
-              </p>
-            </Card>
-
-            {candidate.profile_notes ? (
-              <Card>
-                <h2 className="text-xl font-black">Manager notes</h2>
-                <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-ink/70">{candidate.profile_notes}</p>
-              </Card>
-            ) : null}
-
-            <Card>
-              <h2 className="text-xl font-black">Extracted skills</h2>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {extractedSkills.length ? extractedSkills.map((skill) => <Pill key={skill}>{skill}</Pill>) : <Pill>Not analyzed yet</Pill>}
-              </div>
-            </Card>
-
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
-                <h2 className="text-xl font-black">Strengths</h2>
-                <ul className="mt-4 space-y-3">
-                  {strengths.length ? (
-                    strengths.map((highlight) => (
-                      <li key={highlight} className="rounded-2xl bg-moss/10 p-4 text-sm leading-6 text-ink/70">
-                        {highlight}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="rounded-2xl bg-moss/10 p-4 text-sm leading-6 text-ink/70">Not analyzed yet.</li>
-                  )}
-                </ul>
-              </Card>
-              <Card>
-                <h2 className="text-xl font-black">Missing requirements</h2>
-                <ul className="mt-4 space-y-3">
-                  {missingRequirements.length ? (
-                    missingRequirements.map((risk) => (
-                      <li key={risk} className="rounded-2xl bg-clay/10 p-4 text-sm leading-6 text-ink/70">
-                        {risk}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="rounded-2xl bg-clay/10 p-4 text-sm leading-6 text-ink/70">Not analyzed yet.</li>
-                  )}
-                </ul>
-              </Card>
-            </div>
-
-            <Card>
-              <h2 className="text-xl font-black">Areas to validate</h2>
-              <ul className="mt-4 grid gap-3 md:grid-cols-2">
-                {areasToValidate.length ? (
-                  areasToValidate.map((area) => (
-                    <li key={area} className="rounded-2xl border border-ink/10 bg-white/70 p-4 text-sm leading-6 text-ink/70">
-                      {area}
-                    </li>
-                  ))
-                ) : (
-                  <li className="rounded-2xl border border-ink/10 bg-white/70 p-4 text-sm leading-6 text-ink/70">
-                    Not analyzed yet.
-                  </li>
-                )}
-              </ul>
-            </Card>
-          </div>
-        </div>
-      </PageShell>
-    );
-  }
-
-  const candidate = getCandidate(id);
-  const job = getJob(candidate.jobId);
+  const { candidate, job, aiStatus, skillMatch, linkedinUrl, source } = await getCandidateView(id);
 
   const matchSignals = [
-    { label: "Role alignment", value: 92 },
-    { label: "Operations evidence", value: candidate.fitScore },
-    { label: "Interview readiness", value: 76 }
+    { label: "Matched skills", value: skillMatch?.matched?.length ?? candidate.extractedSkills.length },
+    { label: "Partial matches", value: skillMatch?.partial?.length ?? candidate.strengths.length },
+    { label: "Missing skills", value: skillMatch?.missing?.length ?? candidate.missingRequirements.length }
   ];
+  const skillMatchGroups = skillMatch
+    ? [
+        { label: "Matched", skills: skillMatch.matched ?? [] },
+        { label: "Partial", skills: skillMatch.partial ?? [] },
+        { label: "Missing", skills: skillMatch.missing ?? [] },
+      ]
+    : null;
+  const recommendationLabel = candidate.fitScore >= 80 ? "Strong fit" : candidate.fitScore >= 60 ? "Potential fit" : "Needs review";
 
   return (
     <PageShell
@@ -255,7 +152,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                     <ArrowLeft className="h-4 w-4" />
                     Back to dashboard
                   </Link>
-                  <Pill tone="good">{candidate.stage}</Pill>
+                  <Pill tone="good">{aiStatus === "ready" || source === "mock" ? candidate.stage : aiStatus ?? candidate.stage}</Pill>
                 </div>
                 <h2 className="text-3xl font-black text-navy">{candidate.name}</h2>
                 <p className="mt-2 text-base font-bold text-navy/65">
@@ -272,7 +169,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
             <div className="rounded-xl border border-ink/20 bg-moss/25 p-5">
               <p className="text-xs font-black uppercase text-ink">AI recommendation</p>
               <div className="mt-3 flex items-end justify-between gap-4">
-                <p className="text-2xl font-black text-ink">Strong fit</p>
+                <p className="text-2xl font-black text-ink">{recommendationLabel}</p>
                 <p className="text-lg font-black text-navy">{candidate.fitScore}/100</p>
               </div>
               <div className="mt-4 h-2 rounded-full bg-white">
@@ -300,25 +197,32 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
 
             <Card>
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-black text-navy">Match indicators</h2>
+                <h2 className="text-xl font-black text-navy">Skill match</h2>
                 <div className="flex items-center gap-2 text-sm font-bold text-navy/60">
                   <span className="h-2 w-2 rounded-full bg-ink" />
-                  Candidate benchmark
+                  Candidate requirements
                 </div>
               </div>
-              <div className="space-y-5">
+              <div className="grid gap-3 md:grid-cols-3">
                 {matchSignals.map((signal) => (
-                  <div key={signal.label}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <span className="font-bold text-navy">{signal.label}</span>
-                      <span className="font-black text-ink">{signal.value}% match</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-moss/20">
-                      <div className="h-2 rounded-full bg-ink" style={{ width: `${signal.value}%` }} />
-                    </div>
+                  <div key={signal.label} className="rounded-lg border border-line bg-white p-4">
+                    <p className="text-sm font-bold text-navy/65">{signal.label}</p>
+                    <p className="mt-2 text-2xl font-black text-ink">{signal.value}</p>
                   </div>
                 ))}
               </div>
+              {skillMatchGroups ? (
+                <div className="mt-5 grid gap-4 md:grid-cols-3">
+                  {skillMatchGroups.map(({ label, skills }) => (
+                    <div key={label}>
+                      <p className="mb-2 text-sm font-black text-navy">{label}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {skills.length ? skills.map((skill) => <Pill key={skill}>{skill}</Pill>) : <span className="text-sm text-navy/60">None</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </Card>
 
             <div className="grid gap-6 md:grid-cols-2">
@@ -328,7 +232,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                   <h2 className="text-xl font-black text-navy">Strengths</h2>
                 </div>
                 <ul className="mt-4 space-y-3">
-                  {candidate.strengths.map((highlight) => (
+                  {(candidate.strengths.length ? candidate.strengths : ["Analysis has not returned strengths yet."]).map((highlight) => (
                     <li key={highlight} className="rounded-lg border border-line bg-moss/15 p-4 text-sm leading-6 text-navy/75">
                       {highlight}
                     </li>
@@ -342,7 +246,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                   <h2 className="text-xl font-black text-navy">Risks to validate</h2>
                 </div>
                 <ul className="mt-4 space-y-3">
-                  {candidate.missingRequirements.map((risk) => (
+                  {(candidate.missingRequirements.length ? candidate.missingRequirements : ["Analysis has not returned missing requirements yet."]).map((risk) => (
                     <li key={risk} className="rounded-lg border border-ink/15 bg-clay/45 p-4 text-sm leading-6 text-navy/80">
                       {risk}
                     </li>
@@ -359,7 +263,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 <h2 className="text-xl font-black text-navy">Interview prompts</h2>
               </div>
               <ol className="mt-4 space-y-3">
-                {candidate.suggestedInterviewQuestions.map((question, index) => (
+                {(candidate.suggestedInterviewQuestions.length ? candidate.suggestedInterviewQuestions : ["Analysis has not returned screening questions yet."]).map((question, index) => (
                   <li key={question} className="grid grid-cols-[2rem_1fr] gap-3 rounded-lg border border-line bg-white p-4 text-sm leading-6 text-navy/75">
                     <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-black text-paper">
                       {index + 1}
@@ -379,7 +283,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 The score should be treated as a structured review aid. Validate the gaps below before progressing.
               </p>
               <ul className="mt-4 space-y-3">
-                {candidate.areasToValidate.map((area) => (
+                {(candidate.areasToValidate.length ? candidate.areasToValidate : ["Analysis has not returned validation areas yet."]).map((area) => (
                   <li key={area} className="rounded-lg border border-ink/15 bg-white/75 p-4 text-sm leading-6 text-navy/75">
                     {area}
                   </li>
@@ -390,19 +294,37 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
             <Card>
               <h2 className="text-xl font-black text-navy">Candidate links</h2>
               <div className="mt-4">
-                {candidate.githubUrl ? (
-                  <a
-                    className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
-                    href={candidate.githubUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Github className="h-4 w-4" />
-                      GitHub profile
-                    </span>
-                    <span>Open</span>
-                  </a>
+                {candidate.githubUrl || linkedinUrl ? (
+                  <div className="space-y-3">
+                    {candidate.githubUrl ? (
+                      <a
+                        className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
+                        href={candidate.githubUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Github className="h-4 w-4" />
+                          GitHub profile
+                        </span>
+                        <span>Open</span>
+                      </a>
+                    ) : null}
+                    {linkedinUrl ? (
+                      <a
+                        className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
+                        href={linkedinUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Linkedin className="h-4 w-4" />
+                          LinkedIn profile
+                        </span>
+                        <span>Open</span>
+                      </a>
+                    ) : null}
+                  </div>
                 ) : (
                   <p className="text-sm text-navy/60">No public links added.</p>
                 )}
