@@ -1,5 +1,6 @@
 import { extractCandidateProfile } from "@/lib/ai/extract-candidate";
 import { evaluateCandidate } from "@/lib/ai/evaluate-candidate";
+import { enrichGitHubProfile } from "@/lib/github/enrich-profile";
 import { extractPdfText } from "@/lib/pdf/extract-text";
 import type { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -9,6 +10,7 @@ type CandidateForAnalysis = {
   id: string;
   full_name: string;
   email: string | null;
+  phone: string | null;
   current_position: string | null;
   github_url: string | null;
   ai_candidate_output: {
@@ -54,7 +56,7 @@ export async function analyzeCandidateById(supabase: SupabaseClient, candidateId
   const { data, error } = await supabase
     .from("candidates")
     .select(
-      "id, full_name, email, current_position, github_url, ai_candidate_output, resume_file_path, resume_text, jobs(role_title, business_name, company_values, must_have_skills, nice_to_have_skills, interview_focus, ai_job_output)"
+      "id, full_name, email, phone, current_position, github_url, ai_candidate_output, resume_file_path, resume_text, jobs(role_title, business_name, company_values, must_have_skills, nice_to_have_skills, interview_focus, ai_job_output)"
     )
     .eq("id", candidateId)
     .single();
@@ -89,9 +91,17 @@ export async function analyzeCandidateById(supabase: SupabaseClient, candidateId
   }
 
   const submittedApplication = candidate.ai_candidate_output?.submitted_application ?? {};
+  const githubUrl = candidate.github_url ?? submittedApplication.github_url ?? null;
+  const githubProfile = await enrichGitHubProfile(githubUrl);
+  const evidenceContext = {
+    github_profile: githubProfile,
+    manual_profile_notes: submittedApplication.manual_profile_notes ?? null,
+  };
+
   const extractedProfile = await extractCandidateProfile({
     resumeText,
-    githubUrl: candidate.github_url ?? submittedApplication.github_url,
+    githubUrl,
+    githubProfile,
     linkedinUrl: submittedApplication.linkedin_url,
     manualProfileNotes: submittedApplication.manual_profile_notes,
     jobTitle: job.role_title,
@@ -111,11 +121,40 @@ export async function analyzeCandidateById(supabase: SupabaseClient, candidateId
       description: job.ai_job_output?.job_description ?? null,
     },
     extractedProfile,
+    evidenceContext,
   });
+  const evidenceSnapshot = {
+    submitted_application: {
+      name: candidate.full_name,
+      email: candidate.email,
+      phone: candidate.phone,
+      current_role: candidate.current_position,
+      github_url: githubUrl,
+      linkedin_url: submittedApplication.linkedin_url ?? null,
+      manual_profile_notes: submittedApplication.manual_profile_notes ?? null,
+    },
+    github_profile: githubProfile,
+    resume_text: resumeText,
+    job_context: {
+      title: job.role_title,
+      business_name: job.business_name,
+      requirements: {
+        must_have_skills: job.must_have_skills,
+        nice_to_have_skills: job.nice_to_have_skills,
+        interview_focus: job.interview_focus,
+        company_values: job.company_values,
+      },
+      description: job.ai_job_output?.job_description ?? null,
+    },
+    extracted_profile: extractedProfile,
+    evaluation,
+    note: "GitHub enrichment uses public GitHub API data. LinkedIn is stored as a submitted URL only; no LinkedIn scraping is performed.",
+  };
 
   const aiCandidateOutput = {
     status: "ready",
     submitted_application: submittedApplication,
+    evidence_snapshot: evidenceSnapshot,
     extracted_profile: extractedProfile,
     extracted_skills: extractedProfile.extractedSkills,
     strengths: evaluation.strengths,

@@ -154,8 +154,8 @@ export function CandidateUploadForm({ jobs, selectedJobId }: CandidateUploadForm
         <h2 className="mt-1 text-2xl font-black">What gets saved</h2>
         <div className="mt-5 space-y-4 text-sm leading-6 text-ink/70">
           <p>The candidate record is saved in Supabase with the selected job, links, and profile notes.</p>
-          <p>The CV is uploaded to the private Supabase Storage bucket named candidate-resumes.</p>
-          <p>After upload, the candidate opens in review stage so the analysis step can be connected next.</p>
+          <p>The resume text is extracted from the PDF and saved with the candidate record for AI review.</p>
+          <p>GitHub is enriched from public repositories, then the candidate opens in review stage with a role-specific fit analysis.</p>
         </div>
       </Card>
     </div>

@@ -8,6 +8,7 @@ const openai = new OpenAI({
 export async function extractCandidateProfile(args: {
   resumeText: string;
   githubUrl?: string | null;
+  githubProfile?: unknown;
   linkedinUrl?: string | null;
   manualProfileNotes?: string | null;
   jobTitle: string;
@@ -35,6 +36,9 @@ export async function extractCandidateProfile(args: {
 Job title: ${args.jobTitle}
 Business name: ${args.companyName}
 GitHub URL: ${args.githubUrl ?? "Not provided"}
+GitHub public API enrichment:
+${args.githubProfile ? JSON.stringify(args.githubProfile, null, 2) : "Not provided"}
+
 LinkedIn URL: ${args.linkedinUrl ?? "Not provided"}
 Manual notes: ${args.manualProfileNotes ?? "None"}
 

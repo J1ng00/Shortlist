@@ -181,7 +181,6 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
     return stageMatch && matchesSearch(row, q);
   });
   const readyCount = rows.filter((row) => candidateStatus(row) === "ready").length;
-  const submittedCount = rows.filter((row) => candidateStatus(row) !== "ready").length;
   const averageScore = rows.length
     ? Math.round(rows.reduce((total, row) => total + (candidateScore(row) ?? 0), 0) / rows.length)
     : 0;

@@ -53,6 +53,7 @@ type CandidateAiOutput = {
     linkedin_url?: string | null;
     manual_profile_notes?: string | null;
   };
+  analysis_error?: string;
 };
 
 function asStringArray(value: unknown) {
@@ -89,6 +90,7 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
   const jobOutput = data.jobs.ai_job_output ?? {};
   const suggestedQuestions = output.suggested_screening_questions?.map(questionText) ?? [];
   const fallbackSkills = [...asStringArray(data.jobs.must_have_skills), ...asStringArray(data.jobs.nice_to_have_skills)].slice(0, 6);
+  const submittedApplication = output.submitted_application ?? {};
 
   const candidate: Candidate = {
     id: data.id,
@@ -97,7 +99,7 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
     currentRole: profile.currentRole || data.current_position || "Role not extracted yet",
     experienceYears: profile.experienceYears ?? 0,
     location: profile.location || data.jobs.location || "Location not provided",
-    githubUrl: data.github_url ?? output.submitted_application?.github_url ?? undefined,
+    githubUrl: data.github_url ?? submittedApplication.github_url ?? undefined,
     fitScore: output.initial_fit_score ?? data.initial_fit_score ?? 0,
     stage: data.stage,
     extractedSkills: output.extracted_skills ?? profile.extractedSkills ?? fallbackSkills,
@@ -129,7 +131,7 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
     aiOutput: output,
     aiStatus: output.status,
     skillMatch: output.skill_match,
-    linkedinUrl: data.linkedin_url ?? output.submitted_application?.linkedin_url,
+    linkedinUrl: data.linkedin_url ?? submittedApplication.linkedin_url,
     source: "supabase",
   };
 }
