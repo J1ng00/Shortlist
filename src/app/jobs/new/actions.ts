@@ -1,8 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
-import { generateJobKit, jobInputFromFormData, parseJobOutput } from "@/lib/job-ai";
+import { generateJobKit, jobInputFromFormData } from "@/lib/job-ai";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function createJob(formData: FormData) {
@@ -13,7 +14,7 @@ export async function createJob(formData: FormData) {
     throw new Error("Role title and business name are required.");
   }
 
-  const aiJobOutput = parseJobOutput(formData.get("ai_job_output")) ?? (await generateJobKit(jobInput));
+  const aiJobOutput = await generateJobKit(jobInput);
 
   const { error } = await supabase.from("jobs").insert({
     role_title: jobInput.role_title,
@@ -30,8 +31,6 @@ export async function createJob(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
-
-  redirect("/jobs");
 }
 
 export async function updateJob(formData: FormData) {
@@ -47,7 +46,7 @@ export async function updateJob(formData: FormData) {
     throw new Error("Role title and business name are required.");
   }
 
-  const aiJobOutput = parseJobOutput(formData.get("ai_job_output")) ?? (await generateJobKit(jobInput));
+  const aiJobOutput = await generateJobKit(jobInput);
 
   const { error } = await supabase
     .from("jobs")
@@ -69,7 +68,7 @@ export async function updateJob(formData: FormData) {
     throw new Error(error.message);
   }
 
-  redirect("/jobs");
+  redirect(`/jobs/${jobId}/edit`);
 }
 
 export async function deleteJob(formData: FormData) {
@@ -86,5 +85,5 @@ export async function deleteJob(formData: FormData) {
     throw new Error(error.message);
   }
 
-  redirect("/jobs");
+  revalidatePath("/jobs");
 }

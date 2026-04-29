@@ -1,21 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { Card, Pill } from "@/components/ui";
-import type { JobGenerationInput, JobGenerationOutput } from "@/lib/job-ai";
+import type { JobGenerationOutput } from "@/lib/job-ai";
 import type { Job } from "@/lib/types";
 import { createJob, updateJob } from "./actions";
 
 function toText(items: string[]) {
   return items.join("\n");
-}
-
-function lines(value: FormDataEntryValue | null) {
-  return String(value ?? "")
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function initialOutput(job: Job): JobGenerationOutput {
@@ -30,56 +26,58 @@ function initialOutput(job: Job): JobGenerationOutput {
   };
 }
 
-function inputFromForm(form: HTMLFormElement): JobGenerationInput {
+function formSignature(form: HTMLFormElement) {
   const formData = new FormData(form);
+  const fields = [
+    "business_name",
+    "role_title",
+    "location",
+    "work_type",
+    "company_values",
+    "must_have_skills",
+    "nice_to_have_skills",
+    "interview_focus"
+  ];
 
-  return {
-    business_name: String(formData.get("business_name") ?? "").trim(),
-    role_title: String(formData.get("role_title") ?? "").trim(),
-    location: String(formData.get("location") ?? "").trim(),
-    work_type: String(formData.get("work_type") ?? "").trim(),
-    company_values: lines(formData.get("company_values")),
-    must_have_skills: lines(formData.get("must_have_skills")),
-    nice_to_have_skills: lines(formData.get("nice_to_have_skills")),
-    interview_focus: lines(formData.get("interview_focus"))
-  };
+  return JSON.stringify(fields.map((field) => String(formData.get(field) ?? "").trim()));
+}
+
+function jobSignature(job: Job) {
+  return JSON.stringify([
+    job.businessName,
+    job.title,
+    job.location,
+    job.workType,
+    toText(job.companyValues),
+    toText(job.mustHaves),
+    toText(job.niceToHaves),
+    toText(job.interviewFocus)
+  ]);
+}
+
+function SubmitButton({ disabled, mode }: { disabled: boolean; mode: "create" | "edit" }) {
+  const { pending } = useFormStatus();
+  const label = mode === "edit" ? "Save changes" : "Save job profile";
+
+  return (
+    <button
+      className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss disabled:cursor-not-allowed disabled:bg-ink/30 disabled:text-paper/70"
+      disabled={disabled || pending}
+      type="submit"
+    >
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+      {pending ? "Saving..." : label}
+    </button>
+  );
 }
 
 export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "create" | "edit" }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const [output, setOutput] = useState<JobGenerationOutput>(() => initialOutput(job));
-  const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
-  const outputJson = useMemo(() => JSON.stringify(output), [output]);
+  const initialSignature = useMemo(() => jobSignature(job), [job]);
+  const [output] = useState<JobGenerationOutput>(() => initialOutput(job));
+  const [isDirty, setIsDirty] = useState(mode === "create");
   const formAction = mode === "edit" ? updateJob : createJob;
-
-  function generatePreview() {
-    const form = formRef.current;
-
-    if (!form) {
-      return;
-    }
-
-    setError("");
-    startTransition(async () => {
-      try {
-        const response = await fetch("/api/jobs/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(inputFromForm(form))
-        });
-
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-
-        const payload = (await response.json()) as { data: JobGenerationOutput };
-        setOutput(payload.data);
-      } catch (generationError) {
-        setError(generationError instanceof Error ? generationError.message : "Unable to generate the job kit.");
-      }
-    });
-  }
+  const saveDisabled = mode === "edit" && !isDirty;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
@@ -88,7 +86,12 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
           <h2 className="text-2xl font-black">Job details</h2>
           <Pill>AI form</Pill>
         </div>
-        <form ref={formRef} action={formAction} className="mt-6 grid gap-5">
+        <form
+          ref={formRef}
+          action={formAction}
+          className="mt-6 grid gap-5"
+          onChange={(event) => setIsDirty(formSignature(event.currentTarget) !== initialSignature)}
+        >
           {mode === "edit" ? <input type="hidden" name="job_id" value={job.id} /> : null}
           <label className="grid gap-2 text-sm font-bold">
             Business name
@@ -124,15 +127,14 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
             Interview focus
             <textarea name="interview_focus" className="min-h-32 rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal leading-6 outline-none focus:border-clay" defaultValue={toText(job.interviewFocus)} />
           </label>
-          <input type="hidden" name="ai_job_output" value={outputJson} />
-          {error ? <p className="rounded-2xl bg-clay/15 p-3 text-sm font-bold text-clay">{error}</p> : null}
           <div className="flex flex-wrap gap-3">
-            <button className="rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/40" disabled={isPending} type="button" onClick={generatePreview}>
-              {isPending ? "Generating..." : "Generate AI kit"}
-            </button>
-            <button className="rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss" type="submit">
-              {mode === "edit" ? "Save changes" : "Save job profile"}
-            </button>
+            <Link
+              className="inline-flex items-center justify-center rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/40"
+              href="/jobs"
+            >
+              Back
+            </Link>
+            <SubmitButton disabled={saveDisabled} mode={mode} />
           </div>
         </form>
       </Card>
