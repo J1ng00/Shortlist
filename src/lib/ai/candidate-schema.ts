@@ -39,7 +39,22 @@ export const candidateEvaluationSchema = {
   additionalProperties: false,
   properties: {
     fitScore: { type: "integer" },
+    recommendation: {
+      type: "string",
+      enum: ["hire", "progress", "hold", "reject"]
+    },
+    recommendationHeadline: { type: "string" },
+    recommendationReason: { type: "string" },
+    nextBestAction: { type: "string" },
     aiSummary: { type: "string" },
+    evidenceFor: {
+      type: "array",
+      items: { type: "string" }
+    },
+    evidenceAgainst: {
+      type: "array",
+      items: { type: "string" }
+    },
     strengths: {
       type: "array",
       items: { type: "string" }
@@ -77,7 +92,13 @@ export const candidateEvaluationSchema = {
   },
   required: [
     "fitScore",
+    "recommendation",
+    "recommendationHeadline",
+    "recommendationReason",
+    "nextBestAction",
     "aiSummary",
+    "evidenceFor",
+    "evidenceAgainst",
     "strengths",
     "missingRequirements",
     "areasToValidate",

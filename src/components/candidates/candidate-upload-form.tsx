@@ -1,16 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createCandidateUpload } from "@/lib/supabase/client/create-candidate-upload";
 
 type Props = {
   jobId: string;
+  jobTitle?: string;
+  businessName?: string;
 };
 
-export function CandidateUploadForm({ jobId }: Props) {
-  const router = useRouter();
-
+export function CandidateUploadForm({ jobId, jobTitle, businessName }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [githubUrl, setGithubUrl] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
@@ -21,6 +19,7 @@ export function CandidateUploadForm({ jobId }: Props) {
   const [currentPosition, setCurrentPosition] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,19 +32,28 @@ export function CandidateUploadForm({ jobId }: Props) {
       setIsSubmitting(true);
       setError("");
 
-      const candidateId = await createCandidateUpload({
-        jobId,
-        file,
-        githubUrl,
-        linkedinUrl,
-        manualProfileNotes,
-        fullName,
-        email,
-        phone,
-        currentPosition,
+      const formData = new FormData();
+      formData.set("job_id", jobId);
+      formData.set("full_name", fullName);
+      formData.set("current_position", currentPosition);
+      formData.set("email", email);
+      formData.set("phone", phone);
+      formData.set("github_url", githubUrl);
+      formData.set("linkedin_url", linkedinUrl);
+      formData.set("manual_profile_notes", manualProfileNotes);
+      formData.set("resume", file);
+
+      const response = await fetch("/api/candidate-applications", {
+        method: "POST",
+        body: formData,
       });
 
-      router.push(`/candidates/${candidateId}`);
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error ?? "Failed to upload candidate details.");
+      }
+
+      setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -53,8 +61,29 @@ export function CandidateUploadForm({ jobId }: Props) {
     }
   }
 
+  if (submitted) {
+    return (
+      <div className="rounded-2xl border border-ink/10 bg-white px-5 py-6">
+        <p className="text-sm font-black uppercase text-ink">Application submitted</p>
+        <h2 className="mt-2 text-2xl font-black text-navy">Thank you</h2>
+        <p className="mt-3 text-sm leading-6 text-navy/70">
+          Your resume and profile details have been received. The hiring team will review your application.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {jobTitle || businessName ? (
+        <div className="rounded-2xl border border-ink/10 bg-white px-4 py-3">
+          <p className="text-xs font-black uppercase text-ink/60">Applying for</p>
+          <p className="mt-1 text-sm font-bold text-navy">
+            {[jobTitle, businessName].filter(Boolean).join(" at ")}
+          </p>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-bold text-ink">Candidate name</label>
@@ -62,7 +91,8 @@ export function CandidateUploadForm({ jobId }: Props) {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
-            placeholder="Optional if resume has it"
+            placeholder="Your full name"
+            required
           />
         </div>
 
@@ -102,9 +132,10 @@ export function CandidateUploadForm({ jobId }: Props) {
         <label className="mb-2 block text-sm font-bold text-ink">Resume PDF</label>
         <input
           type="file"
-          accept=".pdf"
+          accept="application/pdf,.pdf"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
+          required
         />
       </div>
 
@@ -114,7 +145,8 @@ export function CandidateUploadForm({ jobId }: Props) {
           value={githubUrl}
           onChange={(e) => setGithubUrl(e.target.value)}
           className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
-          placeholder="Optional"
+          placeholder="https://github.com/..."
+          type="url"
         />
       </div>
 
@@ -124,7 +156,8 @@ export function CandidateUploadForm({ jobId }: Props) {
           value={linkedinUrl}
           onChange={(e) => setLinkedinUrl(e.target.value)}
           className="block w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm"
-          placeholder="Optional"
+          placeholder="https://linkedin.com/in/..."
+          type="url"
         />
       </div>
 
@@ -147,7 +180,7 @@ export function CandidateUploadForm({ jobId }: Props) {
         disabled={isSubmitting}
         className="rounded-2xl bg-ink px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
       >
-        {isSubmitting ? "Processing candidate..." : "Upload candidate"}
+        {isSubmitting ? "Submitting..." : "Submit application"}
       </button>
     </form>
   );

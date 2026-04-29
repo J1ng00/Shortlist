@@ -2,9 +2,9 @@
 
 import { redirect } from "next/navigation";
 
+import { analyzeCandidateById } from "@/lib/candidate-analysis";
+import { extractPdfText } from "@/lib/pdf/extract-text";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-
-const RESUME_BUCKET = "candidate-resumes";
 
 function optionalText(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
@@ -16,6 +16,9 @@ export async function createCandidate(formData: FormData) {
   const jobId = String(formData.get("job_id") ?? "").trim();
   const fullName = String(formData.get("full_name") ?? "").trim();
   const resume = formData.get("resume");
+  const githubUrl = optionalText(formData, "github_url");
+  const linkedinUrl = optionalText(formData, "linkedin_url");
+  const notes = optionalText(formData, "profile_notes");
 
   if (!jobId) {
     throw new Error("Choose a job before uploading a candidate.");
@@ -33,6 +36,12 @@ export async function createCandidate(formData: FormData) {
     throw new Error("Resume must be a PDF.");
   }
 
+  const resumeText = await extractPdfText(Buffer.from(await resume.arrayBuffer()));
+
+  if (!resumeText) {
+    throw new Error("Could not extract text from the uploaded resume PDF.");
+  }
+
   const { data: candidate, error: insertError } = await supabase
     .from("candidates")
     .insert({
@@ -41,9 +50,16 @@ export async function createCandidate(formData: FormData) {
       email: optionalText(formData, "email"),
       phone: optionalText(formData, "phone"),
       current_position: optionalText(formData, "current_position"),
-      github_url: optionalText(formData, "github_url"),
-      linkedin_url: optionalText(formData, "linkedin_url"),
-      profile_notes: optionalText(formData, "profile_notes"),
+      github_url: githubUrl,
+      resume_text: resumeText,
+      ai_candidate_output: {
+        status: "submitted",
+        submitted_application: {
+          github_url: githubUrl,
+          linkedin_url: linkedinUrl,
+          manual_profile_notes: notes,
+        },
+      },
       stage: "review"
     })
     .select("id")
@@ -53,30 +69,24 @@ export async function createCandidate(formData: FormData) {
     throw new Error(insertError.message);
   }
 
-  const resumePath = `${jobId}/${candidate.id}/resume.pdf`;
-  const resumeBuffer = await resume.arrayBuffer();
-  const { error: uploadError } = await supabase.storage
-    .from(RESUME_BUCKET)
-    .upload(resumePath, resumeBuffer, {
-      contentType: "application/pdf",
-      upsert: true
-    });
-
-  if (uploadError) {
-    await supabase.from("candidates").delete().eq("id", candidate.id);
-    throw new Error(uploadError.message);
-  }
-
-  const { error: updateError } = await supabase
-    .from("candidates")
-    .update({
-      resume_file_path: resumePath,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", candidate.id);
-
-  if (updateError) {
-    throw new Error(updateError.message);
+  try {
+    await analyzeCandidateById(supabase, candidate.id);
+  } catch (analysisError) {
+    await supabase
+      .from("candidates")
+      .update({
+        ai_candidate_output: {
+          status: "analysis_failed",
+          submitted_application: {
+            github_url: githubUrl,
+            linkedin_url: linkedinUrl,
+            manual_profile_notes: notes,
+          },
+          analysis_error: analysisError instanceof Error ? analysisError.message : "Candidate analysis failed.",
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", candidate.id);
   }
 
   redirect(`/candidates/${candidate.id}`);

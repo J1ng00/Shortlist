@@ -3,9 +3,11 @@ import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
+import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
 import { getCandidate, getJob } from "@/lib/mock-data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { Candidate, Job } from "@/lib/types";
+import { analyzeCandidate, updateCandidateDecision } from "./actions";
 
 type CandidatePageProps = {
   params: Promise<{
@@ -35,6 +37,22 @@ type CandidateAiOutput = {
     missing?: string[];
   };
   initial_fit_score?: number;
+  recommendation?: "hire" | "progress" | "hold" | "reject";
+  recommendation_headline?: string;
+  recommendation_reason?: string;
+  next_best_action?: string;
+  evidence_for?: string[];
+  evidence_against?: string[];
+  hr_decision?: {
+    outcome?: string;
+    label?: string;
+    note?: string | null;
+  };
+  submitted_application?: {
+    github_url?: string | null;
+    linkedin_url?: string | null;
+    manual_profile_notes?: string | null;
+  };
 };
 
 function asStringArray(value: unknown) {
@@ -49,7 +67,7 @@ function questionText(question: string | { question?: string; reason?: string })
   return question.reason ? `${question.question ?? "Screening question"} - ${question.reason}` : question.question ?? "Screening question";
 }
 
-async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiStatus?: string; skillMatch?: CandidateAiOutput["skill_match"]; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
+async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiOutput: CandidateAiOutput; aiStatus?: string; skillMatch?: CandidateAiOutput["skill_match"]; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
   const { data } = await supabaseAdmin
     .from("candidates")
     .select("*, jobs(*)")
@@ -61,6 +79,7 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
     return {
       candidate: mockCandidate,
       job: getJob(mockCandidate.jobId),
+      aiOutput: {},
       source: "mock",
     };
   }
@@ -78,7 +97,7 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
     currentRole: profile.currentRole || data.current_position || "Role not extracted yet",
     experienceYears: profile.experienceYears ?? 0,
     location: profile.location || data.jobs.location || "Location not provided",
-    githubUrl: data.github_url ?? undefined,
+    githubUrl: data.github_url ?? output.submitted_application?.github_url ?? undefined,
     fitScore: output.initial_fit_score ?? data.initial_fit_score ?? 0,
     stage: data.stage,
     extractedSkills: output.extracted_skills ?? profile.extractedSkills ?? fallbackSkills,
@@ -107,16 +126,17 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
   return {
     candidate,
     job,
+    aiOutput: output,
     aiStatus: output.status,
     skillMatch: output.skill_match,
-    linkedinUrl: data.linkedin_url,
+    linkedinUrl: data.linkedin_url ?? output.submitted_application?.linkedin_url,
     source: "supabase",
   };
 }
 
 export default async function CandidatePage({ params }: CandidatePageProps) {
   const { id } = await params;
-  const { candidate, job, aiStatus, skillMatch, linkedinUrl, source } = await getCandidateView(id);
+  const { candidate, job, aiOutput, aiStatus, skillMatch, linkedinUrl, source } = await getCandidateView(id);
 
   const matchSignals = [
     { label: "Matched skills", value: skillMatch?.matched?.length ?? candidate.extractedSkills.length },
@@ -131,13 +151,35 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
       ]
     : null;
   const recommendationLabel = candidate.fitScore >= 80 ? "Strong fit" : candidate.fitScore >= 60 ? "Potential fit" : "Needs review";
+  const recommendationHeadline = aiOutput.recommendation_headline ?? (
+    aiOutput.recommendation === "reject"
+      ? "You should not hire this candidate because the evidence does not meet the role requirements yet."
+      : `You should ${candidate.fitScore >= 60 ? "consider" : "not progress"} this candidate because the current fit score is ${candidate.fitScore}/100.`
+  );
+  const recommendationReason = aiOutput.recommendation_reason ?? candidate.aiSummary;
+  const nextBestAction = aiOutput.next_best_action ?? "Review the evidence, then choose whether to move the candidate to the next stage or reject them.";
+  const canAnalyze = source === "supabase" && aiStatus !== "ready";
 
   return (
     <PageShell
       eyebrow="Candidate profile"
       title={candidate.name}
       description={`${candidate.currentRole} for ${job.title}. Review the AI summary, evidence, gaps, and interview prompts before moving to the next stage.`}
-      actions={<ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>}
+      actions={
+        <>
+          <ButtonLink href="/candidates" variant="secondary">Back to candidates</ButtonLink>
+          {canAnalyze ? (
+            <form action={analyzeCandidate}>
+              <input name="candidate_id" type="hidden" value={candidate.id} />
+              <ActionSubmitButton pendingLabel="Analyzing...">
+                <Sparkles className="h-4 w-4" />
+                Analyze fit
+              </ActionSubmitButton>
+            </form>
+          ) : null}
+          <ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>
+        </>
+      }
     >
       <div className="space-y-6">
         <Card className="overflow-hidden p-0">
@@ -152,7 +194,8 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                     <ArrowLeft className="h-4 w-4" />
                     Back to dashboard
                   </Link>
-                  <Pill tone="good">{aiStatus === "ready" || source === "mock" ? candidate.stage : aiStatus ?? candidate.stage}</Pill>
+                  <Pill tone="good">{aiOutput.hr_decision?.label ?? candidate.stage}</Pill>
+                  <Pill>{aiStatus === "ready" || source === "mock" ? "AI analyzed" : aiStatus ?? "Awaiting AI"}</Pill>
                 </div>
                 <h2 className="text-3xl font-black text-navy">{candidate.name}</h2>
                 <p className="mt-2 text-base font-bold text-navy/65">
@@ -181,6 +224,26 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
 
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
+            <Card className="border-ink/20 bg-white">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-black text-ink">Hiring recommendation</p>
+                  <h2 className="mt-2 text-2xl font-black text-navy">{recommendationHeadline}</h2>
+                  <p className="mt-4 max-w-4xl text-sm leading-7 text-navy/75">{recommendationReason}</p>
+                  <p className="mt-4 rounded-xl bg-moss/15 px-4 py-3 text-sm font-bold leading-6 text-navy">
+                    Next action: {nextBestAction}
+                  </p>
+                </div>
+                {aiOutput.hr_decision ? (
+                  <div className="rounded-xl border border-line bg-paper p-4">
+                    <p className="text-xs font-black uppercase text-navy/55">HR decision</p>
+                    <p className="mt-2 text-lg font-black text-ink">{aiOutput.hr_decision.label}</p>
+                    {aiOutput.hr_decision.note ? <p className="mt-2 text-sm leading-6 text-navy/65">{aiOutput.hr_decision.note}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+
             <Card>
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -258,6 +321,30 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
 
           <div className="space-y-6">
             <Card>
+              <h2 className="text-xl font-black text-navy">HR stage controls</h2>
+              <p className="mt-2 text-sm leading-6 text-navy/65">
+                Choose the operational outcome for this candidate. Rejected and hired candidates are stored as decision-stage records.
+              </p>
+              <div className="mt-4 grid gap-3">
+                <form action={updateCandidateDecision}>
+                  <input name="candidate_id" type="hidden" value={candidate.id} />
+                  <input name="outcome" type="hidden" value="review" />
+                  <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep in review</ActionSubmitButton>
+                </form>
+                <form action={updateCandidateDecision}>
+                  <input name="candidate_id" type="hidden" value={candidate.id} />
+                  <input name="outcome" type="hidden" value="next_stage" />
+                  <ActionSubmitButton pendingLabel="Updating...">Move to next stage</ActionSubmitButton>
+                </form>
+                <form action={updateCandidateDecision}>
+                  <input name="candidate_id" type="hidden" value={candidate.id} />
+                  <input name="outcome" type="hidden" value="rejected" />
+                  <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject candidate</ActionSubmitButton>
+                </form>
+              </div>
+            </Card>
+
+            <Card>
               <div className="flex items-center gap-3">
                 <MessageSquareText className="h-5 w-5 text-ink" />
                 <h2 className="text-xl font-black text-navy">Interview prompts</h2>
@@ -289,6 +376,28 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                   </li>
                 ))}
               </ul>
+            </Card>
+
+            <Card>
+              <h2 className="text-xl font-black text-navy">Why this recommendation</h2>
+              <div className="mt-4 grid gap-4">
+                <div>
+                  <p className="text-sm font-black text-ink">Evidence for</p>
+                  <ul className="mt-2 space-y-2">
+                    {(aiOutput.evidence_for?.length ? aiOutput.evidence_for : candidate.strengths.length ? candidate.strengths : ["No positive evidence returned yet."]).map((item) => (
+                      <li key={item} className="rounded-lg border border-line bg-white p-3 text-sm leading-6 text-navy/75">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-sm font-black text-ink">Evidence against</p>
+                  <ul className="mt-2 space-y-2">
+                    {(aiOutput.evidence_against?.length ? aiOutput.evidence_against : candidate.missingRequirements.length ? candidate.missingRequirements : ["No counter-evidence returned yet."]).map((item) => (
+                      <li key={item} className="rounded-lg border border-ink/15 bg-clay/30 p-3 text-sm leading-6 text-navy/75">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </Card>
 
             <Card>
@@ -340,8 +449,16 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
               <p className="mt-1 text-sm text-navy/65">Compare the evidence against the role before approving the next stage.</p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <ButtonLink href={`/interview/${candidate.id}`} variant="secondary">Compare with benchmark</ButtonLink>
-              <ButtonLink href={`/interview/${candidate.id}`}>Approve for next stage</ButtonLink>
+              <form action={updateCandidateDecision}>
+                <input name="candidate_id" type="hidden" value={candidate.id} />
+                <input name="outcome" type="hidden" value="rejected" />
+                <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
+              </form>
+              <form action={updateCandidateDecision}>
+                <input name="candidate_id" type="hidden" value={candidate.id} />
+                <input name="outcome" type="hidden" value="next_stage" />
+                <ActionSubmitButton pendingLabel="Updating...">Move to next stage</ActionSubmitButton>
+              </form>
             </div>
           </div>
         </div>

@@ -32,7 +32,7 @@ export async function createJob(formData: FormData) {
     throw new Error(error.message);
   }
 
-  redirect(`/jobs/${data.id}/upload`);
+  redirect(`/apply/${data.id}`);
 }
 
 export async function updateJob(formData: FormData) {

@@ -100,11 +100,18 @@ export default async function JobsPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link
+                      href={`/apply/${job.id}`}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Application form
+                    </Link>
+                    <Link
                       href={`/candidates/new?jobId=${job.id}`}
                       className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
                     >
                       <Plus className="h-4 w-4" />
-                      Candidate
+                      Add internally
                     </Link>
                     <Link
                       href={`/jobs/${job.id}/edit`}

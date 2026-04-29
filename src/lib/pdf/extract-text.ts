@@ -1,12 +1,25 @@
-import { PDFParse } from "pdf-parse";
+import { execFile } from "child_process";
+import { randomUUID } from "crypto";
+import { writeFile, unlink } from "fs/promises";
+import { tmpdir } from "os";
+import path from "path";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 export async function extractPdfText(buffer: Buffer) {
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  const filePath = path.join(tmpdir(), `shortlist-${randomUUID()}.pdf`);
 
   try {
-    const parsed = await parser.getText();
-    return parsed.text?.replace(/\n\n-- \d+ of \d+ --\n?/g, "").trim() || "";
+    await writeFile(filePath, buffer);
+
+    const { stdout } = await execFileAsync(process.execPath, [
+      path.join(process.cwd(), "scripts/extract-pdf-text.cjs"),
+      filePath,
+    ]);
+
+    return stdout.trim();
   } finally {
-    await parser.destroy();
+    await unlink(filePath).catch(() => undefined);
   }
 }

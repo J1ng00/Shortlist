@@ -30,34 +30,33 @@ export async function POST(_: Request, context: RouteContext) {
     return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
   }
 
-  const { data: file, error: fileError } = await supabaseAdmin.storage
-    .from("candidate-resumes")
-    .download(candidate.resume_file_path);
-
-  if (fileError || !file) {
-    await supabaseAdmin
-      .from("candidates")
-      .update({
-        ai_candidate_output: {
-          status: "failed",
-          error: "Resume file missing",
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    return NextResponse.json({ error: "Resume file missing" }, { status: 500 });
-  }
-
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const resumeText = await extractPdfText(buffer);
+    let resumeText = candidate.resume_text;
+
+    if (!resumeText && candidate.resume_file_path) {
+      const { data: file, error: fileError } = await supabaseAdmin.storage
+        .from("candidate-resumes")
+        .download(candidate.resume_file_path);
+
+      if (fileError || !file) {
+        throw new Error("Resume file missing");
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      resumeText = await extractPdfText(buffer);
+    }
+
+    if (!resumeText) {
+      throw new Error("Resume text missing");
+    }
+
+    const submittedApplication = candidate.ai_candidate_output?.submitted_application ?? {};
 
     const extractedProfile = await extractCandidateProfile({
       resumeText,
-      githubUrl: candidate.github_url,
-      linkedinUrl: candidate.linkedin_url,
-      manualProfileNotes: candidate.manual_profile_notes,
+      githubUrl: candidate.github_url ?? submittedApplication.github_url,
+      linkedinUrl: candidate.linkedin_url ?? submittedApplication.linkedin_url,
+      manualProfileNotes: candidate.manual_profile_notes ?? submittedApplication.manual_profile_notes,
       jobTitle: candidate.jobs.role_title,
       companyName: candidate.jobs.business_name,
     });

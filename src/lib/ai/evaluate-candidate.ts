@@ -15,7 +15,7 @@ export async function evaluateCandidate(args: {
   extractedProfile: unknown;
 }) {
   const response = await openai.responses.create({
-    model: process.env.OPENAI_MODEL!,
+    model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
     input: [
       {
         role: "system",
@@ -23,7 +23,7 @@ export async function evaluateCandidate(args: {
           {
             type: "input_text",
             text:
-              "You are an SME hiring copilot. Evaluate the candidate against the job. Be evidence-based, concise, and fair. Do not use protected traits. Return only structured JSON."
+              "You are an SME hiring copilot for HR reviewers. Evaluate the candidate against the job with practical hiring judgment. Be evidence-based, concise, and fair. Do not use protected traits. Return a direct recommendation: hire, progress, hold, or reject. Make recommendationHeadline read like 'You should hire/progress/hold/reject this candidate because...' and ground every reason in the resume, links, notes, or missing evidence. Return only structured JSON."
           }
         ]
       },
