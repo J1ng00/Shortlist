@@ -31,7 +31,7 @@ export function DeleteJobButton({ jobId, roleTitle }: { jobId: string; roleTitle
 
   return (
     <button
-      className="inline-flex items-center justify-center gap-2 rounded-full border border-clay/30 bg-paper px-4 py-2 text-sm font-bold text-clay transition hover:border-clay/60 hover:bg-clay/10 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
       disabled={isDeleting}
       type="button"
       onClick={confirmDelete}

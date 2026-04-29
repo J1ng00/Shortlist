@@ -1,14 +1,7 @@
-import { BriefcaseBusiness, HelpCircle, LayoutDashboard, Settings, UsersRound } from "lucide-react";
 import Link from "next/link";
 
 import { Brand } from "./brand";
-
-const navItems = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Roles", href: "/jobs/new", icon: BriefcaseBusiness },
-  { label: "Candidates", href: "/candidates", icon: UsersRound },
-  { label: "Settings", href: "/", icon: Settings }
-];
+import { navItems, supportItem } from "./nav-items";
 
 export function AppSidebar() {
   return (
@@ -33,9 +26,9 @@ export function AppSidebar() {
       </nav>
 
       <div className="border-t border-line p-3">
-        <Link className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-navy/70 hover:bg-moss/20" href="/">
-          <HelpCircle className="h-5 w-5" />
-          Support
+        <Link className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-navy/70 hover:bg-moss/20" href={supportItem.href}>
+          <supportItem.icon className="h-5 w-5" />
+          {supportItem.label}
         </Link>
       </div>
     </aside>
