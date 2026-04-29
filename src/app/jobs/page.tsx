@@ -51,8 +51,8 @@ export default async function JobsPage() {
             <Plus className="h-4 w-4" />
             New job
           </ButtonLink>
-          <ButtonLink href="/candidates/cand-maya" variant="secondary">
-            Candidate
+          <ButtonLink href="/candidates/new" variant="secondary">
+            Add candidate
           </ButtonLink>
           <ButtonLink href="/interview/cand-maya" variant="secondary">
             Interview
@@ -99,6 +99,13 @@ export default async function JobsPage() {
                     {summary ? <p className="mt-5 text-sm leading-6 text-ink/70">{summary}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/candidates/new?jobId=${job.id}`}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Candidate
+                    </Link>
                     <Link
                       href={`/jobs/${job.id}/edit`}
                       className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"

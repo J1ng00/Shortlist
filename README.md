@@ -5,7 +5,7 @@ Hackathon MVP for structured, evidence-based hiring with a human manager in cont
 Build only this:
 
 1. Manager creates a job.
-2. Manager uploads a candidate resume.
+2. Manager uploads a candidate resume and optional profile links/notes.
 3. AI returns a candidate summary and score.
 4. Manager runs a live interview with AI follow-up suggestions.
 5. AI generates a final hiring recommendation memo.
@@ -31,6 +31,7 @@ This is intentionally narrow. Do not add onboarding, salary benchmarking, job bo
   - `/api/health/supabase`
 - Supabase connection has been verified through the health route.
 - Job creation form at `/jobs/new` now inserts into the Supabase `jobs` table.
+- Candidate upload form at `/candidates/new` inserts into the Supabase `candidates` table and uploads PDFs to Supabase Storage.
 - Mock API routes exist for the 4 AI flows plus resume upload:
   - `POST /api/jobs/generate`
   - `POST /api/candidates/analyze`
@@ -69,9 +70,9 @@ AI outputs:
 
 Manager uploads or enters:
 
-- [ ] Resume PDF
-- [ ] Optional GitHub URL
-- [ ] Optional LinkedIn URL or manual profile notes
+- [x] Resume PDF
+- [x] Optional GitHub URL
+- [x] Optional LinkedIn URL or manual profile notes
 
 AI outputs:
 
@@ -79,8 +80,8 @@ AI outputs:
 - [x] Skill match is visible, currently mock data
 - [x] Missing requirements are visible, currently mock data
 - [x] Suggested screening questions exist in mock data
-- [ ] Add real candidate creation form
-- [ ] Add Supabase Storage upload to `candidate-resumes`
+- [x] Add real candidate creation form
+- [x] Add Supabase Storage upload to `candidate-resumes`
 - [ ] Extract resume text
 - [ ] Replace mock candidate analysis with OpenAI
 - [ ] Save candidate analysis JSON into `candidates.ai_candidate_output`

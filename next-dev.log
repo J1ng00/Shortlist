@@ -1,0 +1,15 @@
+
+> ai-hiring-copilot-sme@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.5.15
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.56.1:3001
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.7s
+ ○ Compiling /candidates/new ...
+ ✓ Compiled /candidates/new in 4.8s (760 modules)
+ ✓ Compiled in 880ms (250 modules)
+ GET /candidates/new 200 in 7189ms

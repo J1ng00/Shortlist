@@ -11,7 +11,7 @@ export default function NewJobPage() {
       eyebrow="Step 1"
       title="Create a job profile"
       description="Keep the profile short and structured. This becomes the grounding context for candidate summaries, interview questions, and final recommendations."
-      actions={<ButtonLink href="/candidates/cand-maya">Continue to candidate</ButtonLink>}
+      actions={<ButtonLink href="/candidates/new">Continue to candidate</ButtonLink>}
     >
       <JobProfileForm job={job} />
     </PageShell>

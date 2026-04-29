@@ -33,6 +33,8 @@ create table public.candidates (
   phone text,
   current_position text,
   github_url text,
+  linkedin_url text,
+  profile_notes text,
   resume_file_path text,
   resume_text text,
   ai_candidate_output jsonb not null default '{}'::jsonb,
@@ -71,6 +73,29 @@ create index candidates_stage_idx on public.candidates(stage);
 create index interview_sessions_candidate_id_idx on public.interview_sessions(candidate_id);
 
 -- Supabase Storage setup:
--- Create a private bucket named `candidate-resumes`.
--- Store uploaded resumes at: {job_id}/{candidate_id}/resume.pdf
--- For hackathon speed, use authenticated policies once auth is added.
+insert into storage.buckets (id, name, public)
+values ('candidate-resumes', 'candidate-resumes', false)
+on conflict (id) do update set public = excluded.public;
+
+-- Store uploaded resumes at: {job_id}/{candidate_id}/resume.pdf.
+-- MVP policy: allows browser/server code using the anon key to upload and read resumes.
+-- Replace with authenticated, owner-scoped policies before production use.
+drop policy if exists "candidate resume uploads are allowed for mvp" on storage.objects;
+drop policy if exists "candidate resume reads are allowed for mvp" on storage.objects;
+drop policy if exists "candidate resume updates are allowed for mvp" on storage.objects;
+
+create policy "candidate resume uploads are allowed for mvp"
+on storage.objects for insert
+to anon
+with check (bucket_id = 'candidate-resumes');
+
+create policy "candidate resume reads are allowed for mvp"
+on storage.objects for select
+to anon
+using (bucket_id = 'candidate-resumes');
+
+create policy "candidate resume updates are allowed for mvp"
+on storage.objects for update
+to anon
+using (bucket_id = 'candidate-resumes')
+with check (bucket_id = 'candidate-resumes');

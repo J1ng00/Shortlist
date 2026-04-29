@@ -22,7 +22,7 @@ export function PageShell({ eyebrow, title, description, actions, children }: Pa
               <Link className="hover:text-ink" href="/jobs">
                 Job
               </Link>
-              <Link className="hover:text-ink" href="/candidates/cand-maya">
+              <Link className="hover:text-ink" href="/candidates/new">
                 Candidate
               </Link>
               <Link className="hover:text-ink" href="/interview/cand-maya">
