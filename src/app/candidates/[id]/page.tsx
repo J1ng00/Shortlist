@@ -180,6 +180,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
               </ActionSubmitButton>
             </form>
           ) : null}
+          <ButtonLink href={`/candidates/${candidate.id}/ask-ai`} variant="secondary">Ask AI</ButtonLink>
           <ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>
           {candidateIsSaved ? (
             <>
