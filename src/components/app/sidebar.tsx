@@ -11,7 +11,7 @@ type AppSidebarProps = {
 
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   return (
-    <aside className="hidden border-r border-line bg-white/80 lg:flex lg:flex-col">
+    <aside className="hidden border-r border-line bg-white/80 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:self-start">
       <div className={`flex items-center border-b border-line ${collapsed ? "h-24 flex-col justify-center gap-2 px-2" : "h-16 gap-3 px-4"}`}>
         <div className={collapsed ? "sr-only" : "min-w-0 flex-1"}>
           <Brand />

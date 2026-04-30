@@ -2,8 +2,7 @@ import { BriefcaseBusiness, HelpCircle, LayoutDashboard, Settings, UsersRound } 
 
 export const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Create role", href: "/jobs/new", icon: BriefcaseBusiness },
-  { label: "Saved jobs", href: "/jobs", icon: BriefcaseBusiness },
+  { label: "Jobs", href: "/jobs", icon: BriefcaseBusiness },
   { label: "Candidates", href: "/candidates", icon: UsersRound },
   { label: "Settings", href: "/", icon: Settings }
 ];

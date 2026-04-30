@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type FocusEvent, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Card, Pill } from "@/components/ui";
+import { Card } from "@/components/ui";
 import type { JobGenerationOutput, JobProfileDraft } from "@/lib/job-ai";
 import type { Job } from "@/lib/types";
 import { createJob, updateJob } from "./actions";
@@ -190,13 +189,14 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
     []
   );
 
-  useEffect(() => {
+  async function generateDraftIfReady() {
     if (mode !== "create") {
       return;
     }
 
-    const business = businessName.trim();
-    const role = roleTitle.trim();
+    const currentFormData = formRef.current ? new FormData(formRef.current) : null;
+    const business = String(currentFormData?.get("business_name") ?? businessName).trim();
+    const role = String(currentFormData?.get("role_title") ?? roleTitle).trim();
 
     if (!business || !role) {
       return;
@@ -208,70 +208,77 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
       return;
     }
 
-    const timer = window.setTimeout(async () => {
-      const lastDraftValues = lastDraftValuesRef.current;
-      const canApplyDraft = (Object.entries(draftFieldRefs) as Array<[DraftFieldName, typeof companyValuesRef]>).every(([name, ref]) => {
-        const currentValue = ref.current?.value.trim() ?? "";
+    const lastDraftValues = lastDraftValuesRef.current;
+    const canApplyDraft = (Object.entries(draftFieldRefs) as Array<[DraftFieldName, typeof companyValuesRef]>).every(([name, ref]) => {
+      const currentValue = ref.current?.value.trim() ?? "";
 
-        return !currentValue || currentValue === lastDraftValues?.[name];
+      return !currentValue || currentValue === lastDraftValues?.[name];
+    });
+
+    if (!canApplyDraft) {
+      return;
+    }
+
+    try {
+      setIsGeneratingDraft(true);
+      setDraftError("");
+
+      const response = await fetch("/api/jobs/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          business_name: business,
+          role_title: role,
+          location: String(currentFormData?.get("location") ?? ""),
+          work_type: String(currentFormData?.get("work_type") ?? "")
+        })
       });
 
-      if (!canApplyDraft) {
-        return;
+      if (!response.ok) {
+        throw new Error("Could not generate the job profile draft.");
       }
 
-      try {
-        const currentFormData = formRef.current ? new FormData(formRef.current) : null;
-        setIsGeneratingDraft(true);
-        setDraftError("");
+      const payload = (await response.json()) as DraftResponse;
+      const nextValues = {
+        company_values: toText(payload.data.company_values),
+        must_have_skills: toText(payload.data.must_have_skills),
+        nice_to_have_skills: toText(payload.data.nice_to_have_skills),
+        interview_focus: toText(payload.data.interview_focus)
+      };
 
-        const response = await fetch("/api/jobs/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            business_name: business,
-            role_title: role,
-            location: String(currentFormData?.get("location") ?? ""),
-            work_type: String(currentFormData?.get("work_type") ?? "")
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error("Could not generate the job profile draft.");
+      (Object.entries(draftFieldRefs) as Array<[DraftFieldName, typeof companyValuesRef]>).forEach(([name, ref]) => {
+        if (ref.current) {
+          ref.current.value = nextValues[name];
         }
+      });
 
-        const payload = (await response.json()) as DraftResponse;
-        const nextValues = {
-          company_values: toText(payload.data.company_values),
-          must_have_skills: toText(payload.data.must_have_skills),
-          nice_to_have_skills: toText(payload.data.nice_to_have_skills),
-          interview_focus: toText(payload.data.interview_focus)
-        };
+      lastDraftValuesRef.current = nextValues;
+      lastDraftSignatureRef.current = signature;
+      setOutput({
+        ...payload.data.job_output,
+        evaluation_rubric: normalizeRubricWeights(payload.data.job_output.evaluation_rubric)
+      });
+      setIsDirty(true);
+    } catch {
+      setDraftError("Automatic draft failed. You can still fill the profile manually.");
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  }
 
-        (Object.entries(draftFieldRefs) as Array<[DraftFieldName, typeof companyValuesRef]>).forEach(([name, ref]) => {
-          if (ref.current) {
-            ref.current.value = nextValues[name];
-          }
-        });
+  function handleDraftFieldBlur(event: FocusEvent<HTMLInputElement>) {
+    if (event.currentTarget.name === "business_name") {
+      setBusinessName(event.currentTarget.value);
+    }
 
-        lastDraftValuesRef.current = nextValues;
-        lastDraftSignatureRef.current = signature;
-        setOutput({
-          ...payload.data.job_output,
-          evaluation_rubric: normalizeRubricWeights(payload.data.job_output.evaluation_rubric)
-        });
-        setIsDirty(true);
-      } catch {
-        setDraftError("Automatic draft failed. You can still fill the profile manually.");
-      } finally {
-        setIsGeneratingDraft(false);
-      }
-    }, 700);
+    if (event.currentTarget.name === "role_title") {
+      setRoleTitle(event.currentTarget.value);
+    }
 
-    return () => window.clearTimeout(timer);
-  }, [businessName, draftFieldRefs, mode, roleTitle]);
+    void generateDraftIfReady();
+  }
 
   function handleFormChange(event: ChangeEvent<HTMLFormElement>) {
     setIsDirty(formSignature(event.currentTarget) !== initialSignature);
@@ -390,7 +397,6 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
         <Card className="relative overflow-hidden">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-2xl font-black">Job details</h2>
-            <Pill>{isGeneratingDraft ? "Generating..." : "AI form"}</Pill>
           </div>
           <form
             id={formId}
@@ -405,11 +411,11 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
               {mode === "edit" ? <input type="hidden" name="job_id" value={job.id} /> : null}
               <label className="grid gap-2 text-sm font-bold">
                 Business name
-                <input disabled={isGeneratingDraft} name="business_name" className="rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal outline-none focus:border-clay disabled:opacity-60" defaultValue={job.businessName} />
+                <input disabled={isGeneratingDraft} name="business_name" className="rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal outline-none focus:border-clay disabled:opacity-60" defaultValue={job.businessName} onBlur={handleDraftFieldBlur} />
               </label>
               <label className="grid gap-2 text-sm font-bold">
                 Role title
-                <input disabled={isGeneratingDraft} name="role_title" className="rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal outline-none focus:border-clay disabled:opacity-60" defaultValue={job.title} />
+                <input disabled={isGeneratingDraft} name="role_title" className="rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal outline-none focus:border-clay disabled:opacity-60" defaultValue={job.title} onBlur={handleDraftFieldBlur} />
               </label>
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="grid gap-2 text-sm font-bold">
@@ -572,12 +578,6 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
       </div>
 
       <div className="flex flex-wrap justify-end gap-3">
-        <Link
-          className="inline-flex items-center justify-center rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/40"
-          href="/jobs"
-        >
-          Back
-        </Link>
         <button
           className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isGeneratingDraft}

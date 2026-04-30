@@ -32,7 +32,7 @@ export function DeleteJobButton({ jobId, roleTitle }: { jobId: string; roleTitle
   return (
     <button
       aria-label={`Delete ${roleTitle}`}
-      className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
       disabled={isDeleting}
       onClick={confirmDelete}
       title="Delete"

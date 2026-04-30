@@ -152,10 +152,10 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                     </div>
                     {summary ? <p className="mt-5 text-sm leading-6 text-ink/70">{summary}</p> : null}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <div className="grid w-full grid-cols-2 gap-2 sm:w-[430px] lg:shrink-0">
                     <Link
                       href={`/apply/${job.id}`}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-ink px-4 text-sm font-bold text-paper transition hover:bg-moss"
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full bg-ink px-4 text-sm font-bold text-paper transition hover:bg-moss"
                     >
                       <ClipboardList className="h-4 w-4" />
                       Application form
@@ -163,7 +163,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                     <Link
                       href={`/candidates/new?jobId=${job.id}`}
                       aria-label={`Add candidate internally for ${job.role_title}`}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 text-sm font-bold text-ink transition hover:border-ink/40"
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full border border-ink/20 bg-paper px-4 text-sm font-bold text-ink transition hover:border-ink/40"
                       title="Add internally"
                     >
                       <UserPlus className="h-4 w-4" />
@@ -172,7 +172,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                     <Link
                       href={`/jobs/${job.id}/edit`}
                       aria-label={`Edit ${job.role_title}`}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 text-sm font-bold text-ink transition hover:border-ink/40"
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full border border-ink/20 bg-paper px-4 text-sm font-bold text-ink transition hover:border-ink/40"
                       title="Edit"
                     >
                       <Pencil className="h-4 w-4" />

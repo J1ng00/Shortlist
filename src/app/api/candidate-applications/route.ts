@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { analyzeCandidateById } from "@/lib/candidate-analysis";
-import { extractPdfText } from "@/lib/pdf/extract-text";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function optionalText(formData: FormData, key: string) {
@@ -54,10 +53,17 @@ export async function POST(request: Request) {
     const notes = optionalText(formData, "manual_profile_notes");
     const githubUrl = optionalUrl(formData, "github_url");
     const linkedinUrl = optionalUrl(formData, "linkedin_url");
-    const resumeText = await extractPdfText(Buffer.from(await resume.arrayBuffer()));
+    const safeFileName = resume.name.replace(/[^a-zA-Z0-9._-]+/g, "-").toLowerCase();
+    const storagePath = `${jobId}/${candidateId}/${safeFileName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("candidate-resumes")
+      .upload(storagePath, resume, {
+        contentType: resume.type || "application/pdf",
+        upsert: false,
+      });
 
-    if (!resumeText) {
-      return NextResponse.json({ error: "Could not extract text from the uploaded resume PDF." }, { status: 400 });
+    if (uploadError) {
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
     const { error: insertError } = await supabase.from("candidates").insert({
@@ -68,9 +74,11 @@ export async function POST(request: Request) {
       phone: optionalText(formData, "phone"),
       current_position: optionalText(formData, "current_position"),
       github_url: githubUrl,
-      resume_text: resumeText,
+      linkedin_url: linkedinUrl,
+      manual_profile_notes: notes,
+      resume_file_path: storagePath,
       ai_candidate_output: {
-        status: "submitted",
+        status: "processing",
         submitted_application: {
           github_url: githubUrl,
           linkedin_url: linkedinUrl,
@@ -84,29 +92,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
-    try {
-      await analyzeCandidateById(supabase, candidateId);
-    } catch (analysisError) {
-      await supabase
-        .from("candidates")
-        .update({
-          ai_candidate_output: {
-            status: "analysis_failed",
-            submitted_application: {
-              github_url: githubUrl,
-              linkedin_url: linkedinUrl,
-              manual_profile_notes: notes,
+    after(async () => {
+      try {
+        await analyzeCandidateById(supabase, candidateId);
+      } catch (analysisError) {
+        await supabase
+          .from("candidates")
+          .update({
+            ai_candidate_output: {
+              status: "analysis_failed",
+              submitted_application: {
+                github_url: githubUrl,
+                linkedin_url: linkedinUrl,
+                manual_profile_notes: notes,
+              },
+              analysis_error: analysisError instanceof Error ? analysisError.message : "Candidate analysis failed.",
             },
-            analysis_error: analysisError instanceof Error ? analysisError.message : "Candidate analysis failed.",
-          },
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", candidateId);
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", candidateId);
+      }
+    });
 
-      return NextResponse.json({ candidateId, analyzed: false });
-    }
-
-    return NextResponse.json({ candidateId, analyzed: true });
+    return NextResponse.json({ candidateId, processing: true }, { status: 202 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Candidate application failed." },

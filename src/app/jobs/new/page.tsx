@@ -1,5 +1,7 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+
 import { PageShell } from "@/components/page-shell";
-import { ButtonLink } from "@/components/ui";
 import type { Job } from "@/lib/types";
 import { JobProfileForm } from "./job-profile-form";
 
@@ -21,7 +23,6 @@ const job: Job = {
 export default function NewJobPage() {
   return (
     <PageShell
-      eyebrow="Step 1"
       title="Create a job profile"
       description={
         <>
@@ -30,7 +31,16 @@ export default function NewJobPage() {
           and rubric for review.
         </>
       }
-      actions={<ButtonLink href="/candidates/new">Continue to candidate</ButtonLink>}
+      prefix={
+        <Link
+          aria-label="Back to jobs"
+          className="inline-flex text-ink transition hover:text-moss"
+          href="/jobs"
+          title="Back to jobs"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+      }
     >
       <JobProfileForm job={job} />
     </PageShell>

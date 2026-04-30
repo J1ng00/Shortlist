@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BriefcaseBusiness, ClipboardList, FileText, MessageSquareText, Search, Stamp } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, ClipboardList, FileText, MessageSquareText, Stamp } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
@@ -126,7 +126,6 @@ export default async function Home() {
           <div className="flex flex-wrap items-center gap-2">
             <Pill tone="good">{readyCount} analyzed</Pill>
             <Pill>{recentCandidates.length - readyCount} awaiting AI review</Pill>
-            <Pill>No auth MVP</Pill>
           </div>
           <h2 className="mt-5 text-3xl font-black tracking-tight">Core workflow</h2>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -156,10 +155,6 @@ export default async function Home() {
               <p className="text-sm font-bold text-ink/60">Recent candidates</p>
               <h2 className="mt-1 text-2xl font-black">Applicant activity</h2>
             </div>
-            <ButtonLink href="/candidates" variant="secondary">
-              <Search className="h-4 w-4" />
-              Search
-            </ButtonLink>
           </div>
           <div className="mt-5 space-y-3">
             {recentCandidates.length ? (

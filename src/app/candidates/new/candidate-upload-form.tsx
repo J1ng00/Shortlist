@@ -35,7 +35,7 @@ export function CandidateUploadForm({ jobs, selectedJobId }: CandidateUploadForm
   const hasJobs = jobs.length > 0;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+    <div className="max-w-4xl">
       <Card>
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl font-black">Candidate details</h2>
@@ -149,15 +149,6 @@ export function CandidateUploadForm({ jobs, selectedJobId }: CandidateUploadForm
         </form>
       </Card>
 
-      <Card>
-        <p className="text-sm font-bold text-ink/60">Upload output</p>
-        <h2 className="mt-1 text-2xl font-black">What gets saved</h2>
-        <div className="mt-5 space-y-4 text-sm leading-6 text-ink/70">
-          <p>The candidate record is saved in Supabase with the selected job, links, and profile notes.</p>
-          <p>The resume text is extracted from the PDF and saved with the candidate record for AI review.</p>
-          <p>GitHub is enriched from public repositories, then the candidate opens in review stage with a role-specific fit analysis.</p>
-        </div>
-      </Card>
     </div>
   );
 }
