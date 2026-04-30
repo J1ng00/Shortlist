@@ -31,10 +31,12 @@ export function DeleteJobButton({ jobId, roleTitle }: { jobId: string; roleTitle
 
   return (
     <button
-      className="inline-flex items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+      aria-label={`Delete ${roleTitle}`}
+      className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
       disabled={isDeleting}
-      type="button"
       onClick={confirmDelete}
+      title="Delete"
+      type="button"
     >
       {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
       {isDeleting ? "Deleting..." : "Delete"}

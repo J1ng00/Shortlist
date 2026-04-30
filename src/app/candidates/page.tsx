@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, BriefcaseBusiness, Github, Linkedin, Search, Sparkles, UserRound } from "lucide-react";
+import { ArrowUpRight, BriefcaseBusiness, CalendarClock, Github, Linkedin, Search, Sparkles, UserRound } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
@@ -41,6 +41,16 @@ type CandidateAiOutput = {
     outcome?: string;
     label?: string;
     note?: string | null;
+    interview_date?: string | null;
+    interview_time?: string | null;
+  };
+  interview_summary?: {
+    headline?: string;
+    summary?: string;
+    strengths?: string[];
+    concerns?: string[];
+    nextStep?: string;
+    finalizedAt?: string;
   };
   submitted_application?: {
     github_url?: string | null;
@@ -121,6 +131,71 @@ function recommendationLabel(row: CandidateRow) {
   }
 
   return "Awaiting AI";
+}
+
+function scheduledInterviewLabel(row: CandidateRow) {
+  const date = row.ai_candidate_output?.hr_decision?.interview_date;
+  const time = row.ai_candidate_output?.hr_decision?.interview_time;
+
+  if (!date || !time) {
+    return null;
+  }
+
+  const scheduledAt = new Date(`${date}T${time}`);
+
+  if (Number.isNaN(scheduledAt.getTime())) {
+    return `Interview scheduled for ${date} at ${time}`;
+  }
+
+  return `Interview scheduled for ${scheduledAt.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })} at ${scheduledAt.toLocaleTimeString("en-AU", {
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
+}
+
+function processRecommendation(row: CandidateRow) {
+  const output = row.ai_candidate_output;
+  const scheduledInterview = scheduledInterviewLabel(row);
+  const score = candidateScore(row);
+  const summary = output?.ai_summary || output?.submitted_application?.manual_profile_notes;
+
+  if (output?.hr_decision?.outcome === "rejected") {
+    return output.hr_decision.note ?? "Decision made: candidate has been rejected.";
+  }
+
+  if (output?.hr_decision?.outcome === "hired") {
+    return output.hr_decision.note ?? "Decision made: candidate is marked for hire.";
+  }
+
+  if (output?.interview_summary) {
+    return output.interview_summary.nextStep
+      ? `Interview complete. Recommended action: ${output.interview_summary.nextStep}`
+      : "Interview complete. Review the interview summary before making the final decision.";
+  }
+
+  if (row.stage === "interview" || output?.hr_decision?.outcome === "next_stage") {
+    return scheduledInterview
+      ? `Interview scheduled. Recommended action: run the interview, then record the interview summary.`
+      : "Candidate is in interview stage. Recommended action: schedule an interview or start the interview copilot.";
+  }
+
+  if (candidateStatus(row) !== "ready") {
+    return "Awaiting AI analysis. Recommended action: analyze fit before deciding.";
+  }
+
+  if (output?.recommendation === "reject" || (score != null && score < 60)) {
+    return output?.recommendation_reason
+      ? `Recommended action: validate the gaps before rejecting or keeping in review. ${output.recommendation_reason}`
+      : "Recommended action: validate the gaps before rejecting or keeping in review.";
+  }
+
+  return output?.next_best_action
+    ? `Recommended action: ${output.next_best_action}`
+    : output?.recommendation_headline || summary || "Recommended action: review the evidence and choose whether to progress to interview.";
 }
 
 function matchesSearch(row: CandidateRow, query: string) {
@@ -247,6 +322,9 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
             const status = candidateStatus(row);
             const score = candidateScore(row);
             const skills = candidateSkills(row);
+            const interviewSummary = row.ai_candidate_output?.interview_summary;
+            const scheduledInterview = scheduledInterviewLabel(row);
+            const currentRecommendation = processRecommendation(row);
             const links = {
               github: row.github_url ?? row.ai_candidate_output?.submitted_application?.github_url,
               linkedin: row.ai_candidate_output?.submitted_application?.linkedin_url,
@@ -274,17 +352,35 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                         </Link>
                         <p className="mt-1 text-sm font-bold text-navy/65">{candidateRole(row)}</p>
                         {job ? (
-                          <p className="mt-2 inline-flex items-center gap-2 text-sm text-navy/60">
-                            <BriefcaseBusiness className="h-4 w-4" />
-                            {job.role_title} at {job.business_name}
+                          <p className="mt-2 flex items-center gap-2 text-sm text-navy/60">
+                            <BriefcaseBusiness className="h-4 w-4 shrink-0" />
+                            <span>{job.role_title} at {job.business_name}</span>
+                          </p>
+                        ) : null}
+                        {scheduledInterview ? (
+                          <p className="mt-3 flex w-fit items-center gap-2 rounded-full bg-moss/15 px-3 py-1 text-sm font-bold text-ink">
+                            <CalendarClock className="h-4 w-4 shrink-0" />
+                            {scheduledInterview}
                           </p>
                         ) : null}
                       </div>
                     </div>
 
                     <p className="mt-4 line-clamp-2 text-sm leading-6 text-navy/70">
-                      {row.ai_candidate_output?.recommendation_headline || row.ai_candidate_output?.ai_summary || row.ai_candidate_output?.submitted_application?.manual_profile_notes || "Application received. Run AI analysis to generate a role-specific overview and fit score."}
+                      {currentRecommendation}
                     </p>
+
+                    {interviewSummary ? (
+                      <div className="mt-4 rounded-2xl border border-moss/25 bg-moss/10 p-4">
+                        <p className="text-xs font-black uppercase text-ink">Interview summary</p>
+                        <h3 className="mt-2 text-base font-black text-navy">
+                          {interviewSummary.headline ?? "Interview completed"}
+                        </h3>
+                        <p className="mt-2 line-clamp-3 text-sm leading-6 text-navy/70">
+                          {interviewSummary.summary ?? "Interview summary has been saved."}
+                        </p>
+                      </div>
+                    ) : null}
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {skills.slice(0, 6).map((skill) => (
@@ -314,12 +410,17 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                     <div className="mt-3 h-2 rounded-full bg-sand">
                       <div className="h-2 rounded-full bg-ink" style={{ width: `${score ?? 0}%` }} />
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <ButtonLink href={`/candidates/${row.id}`} variant="secondary">Open</ButtonLink>
+                    <div className="mt-4 grid gap-2">
+                      <Link
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/30"
+                        href={`/candidates/${row.id}`}
+                      >
+                        Open
+                      </Link>
                       {status !== "ready" && row.resume_text ? (
                         <form action={analyzeCandidate}>
                           <input name="candidate_id" type="hidden" value={row.id} />
-                          <ActionSubmitButton pendingLabel="Analyzing...">
+                          <ActionSubmitButton fullWidth pendingLabel="Analyzing...">
                             <Sparkles className="h-4 w-4" />
                             Analyze
                           </ActionSubmitButton>
@@ -327,11 +428,22 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                       ) : null}
                     </div>
                     <div className="mt-4 grid gap-2">
-                      <ScheduleInterviewModal action={updateCandidateDecision} candidateId={row.id} label="Next stage" variant="secondary" />
+                      <ScheduleInterviewModal
+                        action={updateCandidateDecision}
+                        candidateId={row.id}
+                        fullWidth
+                        label={interviewSummary ? "Schedule another interview" : "Next stage"}
+                        variant="secondary"
+                      />
+                      <form action={updateCandidateDecision}>
+                        <input name="candidate_id" type="hidden" value={row.id} />
+                        <input name="outcome" type="hidden" value="hired" />
+                        <ActionSubmitButton fullWidth pendingLabel="Updating...">Hire now</ActionSubmitButton>
+                      </form>
                       <form action={updateCandidateDecision}>
                         <input name="candidate_id" type="hidden" value={row.id} />
                         <input name="outcome" type="hidden" value="rejected" />
-                        <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
+                        <ActionSubmitButton fullWidth pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
                       </form>
                     </div>
                   </div>

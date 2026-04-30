@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, ChevronDown, Menu, Search, UserRound } from "lucide-react";
+import { Bell, ChevronDown, Menu, UserRound } from "lucide-react";
 
 import { Brand } from "./brand";
 import { navItems, supportItem } from "./nav-items";
@@ -27,15 +27,6 @@ export function AppTopbar() {
             ))}
           </div>
         </details>
-
-        <form action="/candidates" className="hidden min-w-0 max-w-md flex-1 items-center gap-3 rounded-full bg-moss/15 px-4 py-2 text-sm text-navy/55 sm:flex">
-          <Search className="h-5 w-5 shrink-0" />
-          <input
-            className="min-w-0 flex-1 bg-transparent font-bold text-navy outline-none placeholder:text-navy/45"
-            name="q"
-            placeholder="Search candidates, skills, roles..."
-          />
-        </form>
 
         <div className="sm:hidden">
           <Brand compact />

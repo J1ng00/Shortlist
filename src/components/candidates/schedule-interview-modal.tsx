@@ -8,8 +8,9 @@ import { useFormStatus } from "react-dom";
 type ScheduleInterviewModalProps = {
   action: (formData: FormData) => void | Promise<void>;
   candidateId: string;
+  fullWidth?: boolean;
   label?: string;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "menu";
 };
 
 function ScheduleSubmitButton() {
@@ -27,19 +28,16 @@ function ScheduleSubmitButton() {
   );
 }
 
-export function ScheduleInterviewModal({ action, candidateId, label = "Move to next stage", variant = "primary" }: ScheduleInterviewModalProps) {
+export function ScheduleInterviewModal({ action, candidateId, fullWidth = false, label = "Move to next stage", variant = "primary" }: ScheduleInterviewModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const titleId = useId();
+  const widthClassName = fullWidth ? "w-full" : "w-fit";
   const buttonClassName =
-    variant === "secondary"
-      ? "inline-flex w-fit items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
-      : "inline-flex items-center justify-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-moss";
-
-  function openNativePicker(input: HTMLInputElement) {
-    if (typeof input.showPicker === "function") {
-      input.showPicker();
-    }
-  }
+    variant === "menu"
+      ? "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-bold text-ink transition hover:bg-moss/15"
+      : variant === "secondary"
+      ? `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40`
+      : `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-moss`;
 
   function closeModal() {
     setIsOpen(false);
@@ -83,8 +81,6 @@ export function ScheduleInterviewModal({ action, candidateId, label = "Move to n
             <input
               className="mt-2 h-12 w-full rounded-xl border border-line bg-white px-4 text-sm font-bold text-navy outline-none transition focus:border-ink/40"
               name="interview_date"
-              onClick={(event) => openNativePicker(event.currentTarget)}
-              onFocus={(event) => openNativePicker(event.currentTarget)}
               required
               type="date"
             />
@@ -95,8 +91,6 @@ export function ScheduleInterviewModal({ action, candidateId, label = "Move to n
             <input
               className="mt-2 h-12 w-full rounded-xl border border-line bg-white px-4 text-sm font-bold text-navy outline-none transition focus:border-ink/40"
               name="interview_time"
-              onClick={(event) => openNativePicker(event.currentTarget)}
-              onFocus={(event) => openNativePicker(event.currentTarget)}
               required
               type="time"
             />
@@ -124,6 +118,7 @@ export function ScheduleInterviewModal({ action, candidateId, label = "Move to n
         onClick={() => setIsOpen(true)}
         type="button"
       >
+        {variant === "menu" ? <CalendarClock className="h-4 w-4" /> : null}
         {label}
       </button>
 
