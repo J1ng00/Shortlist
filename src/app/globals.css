@@ -32,7 +32,7 @@ body {
     linear-gradient(90deg, rgba(60, 87, 143, 0.16), transparent 11rem, transparent calc(100% - 11rem), rgba(60, 87, 143, 0.16)),
     linear-gradient(180deg, #fdfdf5 0%, #f3f6ff 54%, #fdfdf5 100%);
   color: var(--shortlist-ink);
-  font-family: Outfit, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-outfit), Outfit, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-feature-settings: "kern";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
