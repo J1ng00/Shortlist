@@ -52,6 +52,7 @@ type CandidateAiOutput = {
     nextStep?: string;
     finalizedAt?: string;
   };
+  interview_summary_count?: number;
   submitted_application?: {
     github_url?: string | null;
     linkedin_url?: string | null;
@@ -135,6 +136,51 @@ function scheduledInterviewLabel(row: CandidateRow) {
   })}`;
 }
 
+function hasScheduledInterview(row: CandidateRow) {
+  return Boolean(row.ai_candidate_output?.hr_decision?.interview_date && row.ai_candidate_output?.hr_decision?.interview_time);
+}
+
+function completedInterviewCount(row: CandidateRow) {
+  const count = row.ai_candidate_output?.interview_summary_count;
+
+  if (typeof count === "number" && count > 0) {
+    return count;
+  }
+
+  return row.ai_candidate_output?.interview_summary ? 1 : 0;
+}
+
+function scheduleActionLabel(row: CandidateRow) {
+  return hasScheduledInterview(row) || completedInterviewCount(row) > 0 ? "Reschedule" : "Schedule";
+}
+
+function candidatePipelineLabel(row: CandidateRow) {
+  const status = displayStatus(row);
+  const completedInterviews = completedInterviewCount(row);
+
+  if (status === "reject") {
+    return "Rejected";
+  }
+
+  if (status === "hired") {
+    return "Hired";
+  }
+
+  if (completedInterviews > 0) {
+    return `Interview #${completedInterviews} completed`;
+  }
+
+  if (hasScheduledInterview(row) || status === "interview") {
+    return "Pending interview";
+  }
+
+  if (status === "review") {
+    return "Review";
+  }
+
+  return "Review";
+}
+
 function processRecommendation(row: CandidateRow) {
   const output = row.ai_candidate_output;
   const scheduledInterview = scheduledInterviewLabel(row);
@@ -151,8 +197,8 @@ function processRecommendation(row: CandidateRow) {
 
   if (output?.interview_summary) {
     return output.interview_summary.nextStep
-      ? `Interview complete. Recommended action: ${output.interview_summary.nextStep}`
-      : "Interview complete. Review the interview summary before making the final decision.";
+      ? `Recommended action: ${output.interview_summary.nextStep}`
+      : "Recommended action: review the interview summary before making the final decision.";
   }
 
   if (row.stage === "interview" || output?.hr_decision?.outcome === "next_stage") {
@@ -236,7 +282,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
     const stageMatch = stage === "all" || displayStatus(row) === stage;
     return stageMatch && matchesSearch(row, q);
   });
-  const readyCount = rows.filter((row) => candidateStatus(row) === "ready").length;
+  const readyCount = rows.filter((row) => displayStatus(row) === "review").length;
   const interviewCount = rows.filter((row) => displayStatus(row) === "interview").length;
 
   return (
@@ -245,10 +291,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
       title="Candidate pipeline"
       description="Review every submitted applicant, search across roles and profile details, and run AI fit analysis against each job profile."
       actions={
-        <>
-          <ButtonLink href="/jobs">Saved roles</ButtonLink>
-          <ButtonLink href="/candidates/new" variant="secondary">Add internally</ButtonLink>
-        </>
+        <ButtonLink href="/candidates/new" variant="secondary">Add internally</ButtonLink>
       }
     >
       <div className="grid gap-4 md:grid-cols-3">
@@ -288,8 +331,12 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
             <option value="reject">Rejected</option>
             <option value="hired">Hired</option>
           </select>
-          <button className="h-12 rounded-xl bg-ink px-5 text-sm font-black text-paper" type="submit">
-            Search
+          <button
+            aria-label="Search candidates"
+            className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-paper transition hover:bg-navy"
+            type="submit"
+          >
+            <Search className="h-5 w-5" />
           </button>
         </form>
       </Card>
@@ -374,7 +421,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
 
                   <div className="rounded-xl border border-line bg-white p-4">
                     <p className="text-xs font-black uppercase text-navy/55">Status</p>
-                    <p className="mt-2 text-2xl font-black capitalize text-ink">{statusLabel}</p>
+                    <p className="mt-2 text-2xl font-black text-ink">{candidatePipelineLabel(row)}</p>
                     <div className="mt-4 grid gap-2">
                       <Link
                         className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/30"
@@ -406,15 +453,17 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                               action={updateCandidateDecision}
                               candidateId={row.id}
                               fullWidth
-                              label="Schedule"
+                              label={scheduleActionLabel(row)}
                               variant="secondary"
                             />
                           ) : (
-                            <form action={updateCandidateDecision}>
-                              <input name="candidate_id" type="hidden" value={row.id} />
-                              <input name="outcome" type="hidden" value="next_stage" />
-                              <ActionSubmitButton fullWidth pendingLabel="Updating..." variant="secondary">Next stage</ActionSubmitButton>
-                            </form>
+                            <ScheduleInterviewModal
+                              action={updateCandidateDecision}
+                              candidateId={row.id}
+                              fullWidth
+                              label={scheduleActionLabel(row)}
+                              variant="secondary"
+                            />
                           )}
                           <form action={updateCandidateDecision}>
                             <input name="candidate_id" type="hidden" value={row.id} />

@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarClock, Loader2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 
 import { LoadingPanel } from "@/components/ui";
@@ -23,7 +24,7 @@ function ScheduleSubmitButton() {
       {pending ? (
         <div className="absolute inset-0 z-10 grid place-items-center rounded-3xl bg-paper/80 p-6 backdrop-blur-sm">
           <LoadingPanel title="Scheduling interview">
-            Saving the interview time and moving the candidate to the next stage.
+            Saving the interview time for this candidate.
           </LoadingPanel>
         </div>
       ) : null}
@@ -39,8 +40,9 @@ function ScheduleSubmitButton() {
   );
 }
 
-export function ScheduleInterviewModal({ action, candidateId, fullWidth = false, label = "Move to next stage", variant = "primary" }: ScheduleInterviewModalProps) {
+export function ScheduleInterviewModal({ action, candidateId, fullWidth = false, label = "Schedule", variant = "primary" }: ScheduleInterviewModalProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const router = useRouter();
   const titleId = useId();
   const widthClassName = fullWidth ? "w-full" : "w-fit";
   const buttonClassName =
@@ -54,8 +56,10 @@ export function ScheduleInterviewModal({ action, candidateId, fullWidth = false,
     setIsOpen(false);
   }
 
-  function handleSubmit() {
+  async function handleAction(formData: FormData) {
+    await action(formData);
     setIsOpen(false);
+    router.refresh();
   }
 
   const modal = (
@@ -68,7 +72,7 @@ export function ScheduleInterviewModal({ action, candidateId, fullWidth = false,
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-black uppercase text-ink">Next stage</p>
+            <p className="text-sm font-black uppercase text-ink">Interview</p>
             <h2 className="mt-1 text-2xl font-black text-navy" id={titleId}>
               Schedule an interview
             </h2>
@@ -83,7 +87,7 @@ export function ScheduleInterviewModal({ action, candidateId, fullWidth = false,
           </button>
         </div>
 
-        <form action={action} className="mt-6 space-y-4" onSubmit={handleSubmit}>
+        <form action={handleAction} className="mt-6 space-y-4">
           <input name="candidate_id" type="hidden" value={candidateId} />
           <input name="outcome" type="hidden" value="next_stage" />
 
