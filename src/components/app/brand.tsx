@@ -10,7 +10,7 @@ type BrandProps = {
 export function Brand({ compact = false }: BrandProps) {
   return (
     <Link href="/" className="group flex min-w-0 items-center gap-3">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-paper shadow-panel transition duration-200 group-hover:scale-105">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden transition duration-200 group-hover:scale-105">
         <Image
           alt="Shortlist"
           className="h-full w-full object-contain"
