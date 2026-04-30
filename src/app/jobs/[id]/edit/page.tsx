@@ -1,7 +1,8 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { PageShell } from "@/components/page-shell";
-import { ButtonLink } from "@/components/ui";
 import type { JobGenerationOutput } from "@/lib/job-ai";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Job } from "@/lib/types";
@@ -67,7 +68,16 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
       eyebrow="Edit job"
       title={job.title}
       description="Adjust the job setup and regenerate the AI hiring kit before saving changes back to the job profile."
-      actions={<ButtonLink href="/jobs" variant="secondary">Back to jobs</ButtonLink>}
+      prefix={
+        <Link
+          aria-label="Back to jobs"
+          className="inline-flex text-ink transition hover:text-moss"
+          href="/jobs"
+          title="Back to jobs"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+      }
     >
       <JobProfileForm job={job} mode="edit" />
     </PageShell>

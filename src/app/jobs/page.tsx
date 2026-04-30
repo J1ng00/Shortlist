@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { CalendarDays, ClipboardList, MapPin, Pencil, Plus, Search, Sparkles, UserPlus } from "lucide-react";
+import { ClipboardList, MapPin, Pencil, Plus, Search, UserPlus } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { normalizeWorkType, workTypeOptions } from "@/lib/work-types";
 import { DeleteJobButton } from "./delete-job-button";
 
 type SavedJob = {
@@ -72,9 +73,9 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   }
 
   const savedJobs = (jobs ?? []) as SavedJob[];
-  const workTypes = Array.from(new Set(savedJobs.map((job) => job.work_type).filter((value): value is string => Boolean(value)))).sort();
   const filteredJobs = savedJobs.filter((job) => {
-    const workTypeMatch = workType === "all" || job.work_type === workType;
+    const normalizedWorkType = normalizeWorkType(job.work_type);
+    const workTypeMatch = workType === "all" || normalizedWorkType === workType;
     return workTypeMatch && matchesSearch(job, q);
   });
 
@@ -107,12 +108,16 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
             name="workType"
           >
             <option value="all">All work types</option>
-            {workTypes.map((type) => (
+            {workTypeOptions.map((type) => (
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
-          <button className="h-12 rounded-xl bg-ink px-5 text-sm font-black text-paper" type="submit">
-            Search
+          <button
+            aria-label="Search jobs"
+            className="flex h-12 items-center justify-center rounded-xl bg-ink px-5 text-paper transition hover:bg-moss"
+            type="submit"
+          >
+            <Search className="h-5 w-5" />
           </button>
         </form>
       </Card>
@@ -123,6 +128,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
             const summary = job.ai_job_output?.job_description;
             const rubric = job.ai_job_output?.evaluation_rubric ?? [];
             const categories = job.ai_job_output?.interview_categories ?? [];
+            const normalizedWorkType = normalizeWorkType(job.work_type);
 
             return (
               <Card key={job.id}>
@@ -130,7 +136,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                   <div className="max-w-3xl">
                     <div className="flex flex-wrap items-center gap-2">
                       <Pill tone="good">Saved</Pill>
-                      {job.work_type ? <Pill>{job.work_type}</Pill> : null}
+                      {normalizedWorkType ? <Pill>{normalizedWorkType}</Pill> : null}
                     </div>
                     <h2 className="mt-4 text-2xl font-black">{job.role_title}</h2>
                     <p className="mt-1 font-bold text-ink/70">{job.business_name}</p>
@@ -142,7 +148,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                         </span>
                       ) : null}
                       <span className="inline-flex items-center gap-2">
-                        <CalendarDays className="h-4 w-4" />
+                        <span className="font-bold text-ink/70">Created on:</span>
                         {new Intl.DateTimeFormat("en-AU", {
                           day: "numeric",
                           month: "short",
@@ -190,10 +196,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
                     </p>
                   </div>
                   <div className="rounded-2xl bg-white/70 p-4">
-                    <p className="inline-flex items-center gap-2 text-sm font-bold text-ink">
-                      <Sparkles className="h-4 w-4 text-clay" />
-                      Interview categories
-                    </p>
+                    <p className="text-sm font-bold text-ink">Interview categories</p>
                     <p className="mt-2 text-sm leading-6 text-ink/60">
                       {categories.length ? categories.join(", ") : "No categories generated yet."}
                     </p>
