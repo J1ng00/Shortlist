@@ -16,9 +16,9 @@ const flow = [
     icon: BriefcaseBusiness
   },
   {
-    title: "Review candidate",
-    description: "Show skills, strengths, missing requirements, and fit score.",
-    href: `/candidates/${candidate.id}`,
+    title: "Upload candidate",
+    description: "Add a resume and profile links for the role.",
+    href: `/jobs/${job.id}/upload`,
     icon: FileText
   },
   {
@@ -65,12 +65,14 @@ export default function Home() {
                 <Link
                   key={step.title}
                   href={step.href}
-                  className="group rounded-3xl border border-ink/10 bg-white/60 p-5 transition hover:-translate-y-0.5 hover:border-clay/40 hover:shadow-soft"
+                  className="group rounded-xl border border-line bg-sand p-5 transition hover:-translate-y-0.5 hover:border-ink/35 hover:bg-white hover:shadow-soft"
                 >
-                  <Icon className="h-7 w-7 text-clay" />
+                  <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-ink text-paper">
+                    <Icon className="h-5 w-5" />
+                  </span>
                   <h3 className="mt-4 text-lg font-black">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-ink/60">{step.description}</p>
-                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-moss">
+                  <p className="mt-2 text-sm leading-6 text-navy/70">{step.description}</p>
+                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-ink">
                     Open <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                   </div>
                 </Link>

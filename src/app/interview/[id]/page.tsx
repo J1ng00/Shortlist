@@ -1,7 +1,7 @@
 import { InterviewWorkspace } from "@/components/interview-workspace";
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card } from "@/components/ui";
-import { getCandidate, getInterviewSession, getJob } from "@/lib/mock-data";
+import { getInterviewBundle } from "@/lib/server-data";
 
 type InterviewPageProps = {
   params: Promise<{
@@ -11,9 +11,7 @@ type InterviewPageProps = {
 
 export default async function InterviewPage({ params }: InterviewPageProps) {
   const { id } = await params;
-  const candidate = getCandidate(id);
-  const job = getJob(candidate.jobId);
-  const session = getInterviewSession(candidate.id);
+  const { candidate, job, session } = await getInterviewBundle(id);
 
   return (
     <PageShell
@@ -44,7 +42,7 @@ export default async function InterviewPage({ params }: InterviewPageProps) {
           <h2 className="text-xl font-black">Inconsistencies to probe</h2>
           <ul className="mt-4 space-y-3">
             {session.inconsistenciesToProbe.map((item) => (
-              <li key={item} className="rounded-2xl bg-clay/10 p-4 text-sm leading-6 text-ink/70">
+              <li key={item} className="rounded-xl border border-ink/15 bg-moss/15 p-4 text-sm leading-6 text-ink/70">
                 {item}
               </li>
             ))}
@@ -54,7 +52,7 @@ export default async function InterviewPage({ params }: InterviewPageProps) {
           <h2 className="text-xl font-black">Missing evidence</h2>
           <ul className="mt-4 space-y-3">
             {session.missingEvidence.map((item) => (
-              <li key={item} className="rounded-2xl bg-white/70 p-4 text-sm leading-6 text-ink/70">
+              <li key={item} className="rounded-xl border border-line bg-sand p-4 text-sm leading-6 text-ink/70">
                 {item}
               </li>
             ))}
@@ -64,7 +62,7 @@ export default async function InterviewPage({ params }: InterviewPageProps) {
           <h2 className="text-xl font-black">Rubric updates</h2>
           <div className="mt-4 space-y-3">
             {session.rubricUpdates.map((item) => (
-              <div key={item.name} className="rounded-2xl bg-moss/10 p-4">
+              <div key={item.name} className="rounded-xl border border-line bg-sand p-4">
                 <p className="font-bold">{item.name}: {item.score}/5</p>
                 <p className="mt-2 text-sm leading-6 text-ink/70">{item.evidence}</p>
               </div>

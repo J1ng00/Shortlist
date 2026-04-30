@@ -43,7 +43,7 @@ export function InterviewWorkspace({ session }: { session: InterviewSession }) {
         <h2 className="mt-1 text-2xl font-black">Ask next</h2>
         <div className="mt-5 space-y-3">
           {generatedQuestions.map((question) => (
-            <div key={question} className="rounded-2xl border border-ink/10 bg-white/60 p-4">
+            <div key={question} className="rounded-xl border border-line bg-sand p-4">
               <p className="text-sm leading-6 text-ink/75">{question}</p>
             </div>
           ))}

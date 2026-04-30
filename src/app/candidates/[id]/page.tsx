@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
-import { getCandidate, getJob } from "@/lib/mock-data";
+import { getCandidateBundle } from "@/lib/server-data";
 
 type CandidatePageProps = {
   params: Promise<{
@@ -13,8 +13,7 @@ type CandidatePageProps = {
 
 export default async function CandidatePage({ params }: CandidatePageProps) {
   const { id } = await params;
-  const candidate = getCandidate(id);
-  const job = getJob(candidate.jobId);
+  const { candidate, job } = await getCandidateBundle(id);
 
   const matchSignals = [
     { label: "Role alignment", value: 92 },
@@ -33,7 +32,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
         <Card className="overflow-hidden p-0">
           <div className="grid gap-6 p-6 lg:grid-cols-[1fr_280px] lg:items-center">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-line bg-moss/25 text-ink">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-line bg-sand text-ink">
                 <UserRound className="h-9 w-9" />
               </div>
               <div className="min-w-0">
@@ -56,14 +55,14 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
               </div>
             </div>
 
-            <div className="rounded-xl border border-ink/20 bg-moss/25 p-5">
-              <p className="text-xs font-black uppercase text-ink">AI recommendation</p>
+            <div className="rounded-xl border border-ink/30 bg-ink p-5 text-paper">
+              <p className="text-xs font-black uppercase text-paper/70">AI recommendation</p>
               <div className="mt-3 flex items-end justify-between gap-4">
-                <p className="text-2xl font-black text-ink">Strong fit</p>
-                <p className="text-lg font-black text-navy">{candidate.fitScore}/100</p>
+                <p className="text-2xl font-black text-paper">Strong fit</p>
+                <p className="text-lg font-black text-paper">{candidate.fitScore}/100</p>
               </div>
-              <div className="mt-4 h-2 rounded-full bg-white">
-                <div className="h-2 rounded-full bg-ink" style={{ width: `${candidate.fitScore}%` }} />
+              <div className="mt-4 h-2 rounded-full bg-paper/20">
+                <div className="h-2 rounded-full bg-moss" style={{ width: `${candidate.fitScore}%` }} />
               </div>
             </div>
           </div>
@@ -77,7 +76,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                   <p className="text-sm font-black text-ink">AI candidate summary</p>
                   <h2 className="mt-1 text-2xl font-black text-navy">Review snapshot</h2>
                 </div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-clay px-3 py-1 text-xs font-black text-navy">
+                <span className="inline-flex items-center gap-2 rounded-full border border-ink/15 bg-moss/20 px-3 py-1 text-xs font-black text-ink">
                   <Sparkles className="h-4 w-4" />
                   Resume parsed
                 </span>
@@ -100,7 +99,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                       <span className="font-bold text-navy">{signal.label}</span>
                       <span className="font-black text-ink">{signal.value}% match</span>
                     </div>
-                    <div className="h-2 rounded-full bg-moss/20">
+                    <div className="h-2 rounded-full bg-sand">
                       <div className="h-2 rounded-full bg-ink" style={{ width: `${signal.value}%` }} />
                     </div>
                   </div>
@@ -116,7 +115,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 </div>
                 <ul className="mt-4 space-y-3">
                   {candidate.strengths.map((highlight) => (
-                    <li key={highlight} className="rounded-lg border border-line bg-moss/15 p-4 text-sm leading-6 text-navy/75">
+                    <li key={highlight} className="rounded-lg border border-line bg-sand p-4 text-sm leading-6 text-navy/75">
                       {highlight}
                     </li>
                   ))}
@@ -130,7 +129,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 </div>
                 <ul className="mt-4 space-y-3">
                   {candidate.missingRequirements.map((risk) => (
-                    <li key={risk} className="rounded-lg border border-ink/15 bg-clay/45 p-4 text-sm leading-6 text-navy/80">
+                    <li key={risk} className="rounded-lg border border-ink/15 bg-moss/15 p-4 text-sm leading-6 text-navy/80">
                       {risk}
                     </li>
                   ))}
@@ -157,7 +156,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
               </ol>
             </Card>
 
-            <Card className="border-ink/20 bg-moss/15">
+            <Card className="border-ink/20 bg-moss/60">
               <div className="flex items-center gap-3">
                 <ShieldCheck className="h-5 w-5 text-ink" />
                 <h2 className="text-xl font-black text-navy">Decision support</h2>
@@ -179,7 +178,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
               <div className="mt-4">
                 {candidate.githubUrl ? (
                   <a
-                    className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
+                    className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/60"
                     href={candidate.githubUrl}
                     rel="noreferrer"
                     target="_blank"

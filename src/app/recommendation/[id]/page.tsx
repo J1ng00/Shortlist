@@ -1,6 +1,6 @@
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, FitScore, Pill } from "@/components/ui";
-import { getCandidate, getJob, getRecommendation } from "@/lib/mock-data";
+import { getRecommendationBundle } from "@/lib/server-data";
 
 type RecommendationPageProps = {
   params: Promise<{
@@ -10,9 +10,7 @@ type RecommendationPageProps = {
 
 export default async function RecommendationPage({ params }: RecommendationPageProps) {
   const { id } = await params;
-  const candidate = getCandidate(id);
-  const job = getJob(candidate.jobId);
-  const recommendation = getRecommendation(candidate.id);
+  const { candidate, job, recommendation } = await getRecommendationBundle(id);
   const decisionLabel = recommendation.decision.replaceAll("_", " ");
 
   return (
@@ -50,7 +48,7 @@ export default async function RecommendationPage({ params }: RecommendationPageP
               <h3 className="text-lg font-black">Supporting evidence</h3>
               <ul className="mt-4 space-y-3">
                 {recommendation.supportingEvidence.map((item) => (
-                  <li key={item} className="rounded-2xl bg-moss/10 p-4 text-sm leading-6 text-ink/70">
+                  <li key={item} className="rounded-xl border border-line bg-sand p-4 text-sm leading-6 text-ink/70">
                     {item}
                   </li>
                 ))}
@@ -60,14 +58,14 @@ export default async function RecommendationPage({ params }: RecommendationPageP
               <h3 className="text-lg font-black">Concerns</h3>
               <ul className="mt-4 space-y-3">
                 {recommendation.concerns.map((item) => (
-                  <li key={item} className="rounded-2xl bg-clay/10 p-4 text-sm leading-6 text-ink/70">
+                  <li key={item} className="rounded-xl border border-ink/15 bg-moss/15 p-4 text-sm leading-6 text-ink/70">
                     {item}
                   </li>
                 ))}
               </ul>
             </section>
           </div>
-          <div className="mt-6 rounded-2xl border border-ink/10 bg-white/70 p-5">
+          <div className="mt-6 rounded-xl border border-line bg-sand p-5">
             <p className="text-sm font-bold text-ink/60">Next step</p>
             <p className="mt-2 leading-7 text-ink/75">{recommendation.nextStep}</p>
           </div>

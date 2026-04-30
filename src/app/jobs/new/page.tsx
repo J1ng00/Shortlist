@@ -58,7 +58,12 @@ export default function NewJobPage() {
             </label>
             <input type="hidden" name="generated_job_description" value={job.generatedJobDescription} />
             <input type="hidden" name="interview_categories" value={job.interviewCategories.join("\n")} />
-            <button className="rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss" type="submit">
+            <input
+              type="hidden"
+              name="evaluation_rubric"
+              value={job.evaluationRubric.map((item) => `${item.name}|${item.weight}|${item.evidence}`).join("\n")}
+            />
+            <button className="rounded-lg bg-navy px-5 py-3 text-sm font-bold text-paper transition hover:bg-ink" type="submit">
               Save job profile
             </button>
           </form>
@@ -75,7 +80,7 @@ export default function NewJobPage() {
                 <p>{job.interviewCategories.join(", ")}</p>
               </div>
             </div>
-            <Link className="mt-6 inline-flex text-sm font-bold text-moss hover:text-ink" href="/candidates/cand-maya">
+            <Link className="mt-6 inline-flex text-sm font-bold text-ink hover:text-navy" href="/candidates/cand-maya">
               Skip save and continue with mock candidate
             </Link>
           </Card>
@@ -83,7 +88,7 @@ export default function NewJobPage() {
             <p className="text-sm font-bold text-ink/60">Evaluation rubric</p>
             <div className="mt-4 space-y-3">
               {job.evaluationRubric.map((item) => (
-                <div key={item.name} className="rounded-2xl bg-white/70 p-4">
+                <div key={item.name} className="rounded-xl border border-line bg-sand p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-bold">{item.name}</p>
                     <p className="text-sm text-ink/60">{item.weight}%</p>

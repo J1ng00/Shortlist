@@ -2,8 +2,10 @@ export async function createCandidateUpload(payload: {
   jobId: string;
   file: File;
   githubUrl?: string;
-  linkedinUrl?: string;
-  manualProfileNotes?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  currentPosition?: string;
 }) {
   const res = await fetch("/api/candidates", {
     method: "POST",
@@ -13,8 +15,10 @@ export async function createCandidateUpload(payload: {
       fileName: payload.file.name,
       fileType: payload.file.type,
       githubUrl: payload.githubUrl,
-      linkedinUrl: payload.linkedinUrl,
-      manualProfileNotes: payload.manualProfileNotes,
+      fullName: payload.fullName,
+      email: payload.email,
+      phone: payload.phone,
+      currentPosition: payload.currentPosition,
     }),
   });
 
