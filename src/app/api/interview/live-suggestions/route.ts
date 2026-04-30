@@ -12,6 +12,8 @@ type LiveSuggestions = {
 
 type CandidateAiOutput = {
   ai_summary?: string;
+  interview_summary?: unknown;
+  interview_summary_count?: number;
   strengths?: string[];
   missing_requirements?: string[];
   areas_to_validate?: string[];
@@ -200,6 +202,14 @@ function interviewSummaryFromSuggestions(data: LiveSuggestions, notes: string) {
   };
 }
 
+function currentInterviewSummaryCount(candidateOutput: CandidateAiOutput) {
+  if (typeof candidateOutput.interview_summary_count === "number" && candidateOutput.interview_summary_count > 0) {
+    return candidateOutput.interview_summary_count;
+  }
+
+  return candidateOutput.interview_summary ? 1 : 0;
+}
+
 async function saveInterviewSummary({
   candidateId,
   candidateOutput,
@@ -224,7 +234,8 @@ async function saveInterviewSummary({
     .update({
       ai_candidate_output: {
         ...candidateOutput,
-        interview_summary: interviewSummary
+        interview_summary: interviewSummary,
+        interview_summary_count: currentInterviewSummaryCount(candidateOutput) + 1
       },
       updated_at: new Date().toISOString()
     })

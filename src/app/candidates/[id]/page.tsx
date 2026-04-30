@@ -61,6 +61,7 @@ type CandidateAiOutput = {
     nextStep?: string;
     finalizedAt?: string;
   };
+  interview_summary_count?: number;
   submitted_application?: {
     github_url?: string | null;
     linkedin_url?: string | null;
@@ -105,6 +106,22 @@ function scheduledInterviewLabel(aiOutput: CandidateAiOutput) {
     hour: "numeric",
     minute: "2-digit",
   })}`;
+}
+
+function hasScheduledInterview(aiOutput: CandidateAiOutput) {
+  return Boolean(aiOutput.hr_decision?.interview_date && aiOutput.hr_decision?.interview_time);
+}
+
+function completedInterviewCount(aiOutput: CandidateAiOutput) {
+  if (typeof aiOutput.interview_summary_count === "number" && aiOutput.interview_summary_count > 0) {
+    return aiOutput.interview_summary_count;
+  }
+
+  return aiOutput.interview_summary ? 1 : 0;
+}
+
+function scheduleActionLabel(aiOutput: CandidateAiOutput) {
+  return hasScheduledInterview(aiOutput) || completedInterviewCount(aiOutput) > 0 ? "Reschedule" : "Schedule";
 }
 
 function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput, aiStatus?: string) {
@@ -192,6 +209,24 @@ function statusLabel(status: CandidateStatus) {
     reject: "Rejected",
     hired: "Hired"
   }[status];
+}
+
+function pipelineStatusLabel(status: CandidateStatus, aiOutput: CandidateAiOutput) {
+  const completedInterviews = completedInterviewCount(aiOutput);
+
+  if (status === "reject" || status === "hired") {
+    return statusLabel(status);
+  }
+
+  if (completedInterviews > 0) {
+    return `Interview #${completedInterviews} completed`;
+  }
+
+  if (hasScheduledInterview(aiOutput) || status === "interview") {
+    return "Pending interview";
+  }
+
+  return statusLabel(status);
 }
 
 function aiStatusLabel(aiStatus: string | undefined, source: "supabase" | "mock") {
@@ -294,15 +329,20 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
   return (
     <PageShell
       eyebrow="Candidate profile"
+      prefix={
+        <Link
+          aria-label="Back to candidates"
+          className="inline-flex items-center justify-center text-ink transition hover:text-navy"
+          href="/candidates"
+          title="Back to candidates"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+      }
       title={candidate.name}
       description={`${candidate.currentRole} for ${job.title}. Review the AI summary, evidence, gaps, and interview prompts before moving to the next stage.`}
     >
       <div className="space-y-6">
-        <Link href="/candidates" className="inline-flex items-center gap-2 text-sm font-black text-ink transition hover:text-navy">
-          <ArrowLeft className="h-4 w-4" />
-          Candidates
-        </Link>
-
         {candidateIsSaved && !isFinal ? (
           <div className="flex justify-end">
             <Link
@@ -335,7 +375,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-black uppercase text-paper/55">Current status</p>
-                    <p className="mt-2 text-2xl font-black leading-none">{statusLabel(status)}</p>
+                    <p className="mt-2 text-2xl font-black leading-none">{pipelineStatusLabel(status, aiOutput)}</p>
                   </div>
                   <span className="inline-flex shrink-0 whitespace-nowrap rounded-full border border-paper/15 bg-paper/10 px-3 py-1 text-[11px] font-black text-paper/70">
                     {aiStatusLabel(aiStatus, source)}
@@ -393,13 +433,17 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                         <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep reviewing</ActionSubmitButton>
                       </form>
                       {status === "interview" ? (
-                        <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} label="Schedule" />
+                        <ScheduleInterviewModal
+                          action={updateCandidateDecision}
+                          candidateId={candidate.id}
+                          label={scheduleActionLabel(aiOutput)}
+                        />
                       ) : (
-                        <form action={updateCandidateDecision}>
-                          <input name="candidate_id" type="hidden" value={candidate.id} />
-                          <input name="outcome" type="hidden" value="next_stage" />
-                          <ActionSubmitButton pendingLabel="Updating...">Next stage</ActionSubmitButton>
-                        </form>
+                        <ScheduleInterviewModal
+                          action={updateCandidateDecision}
+                          candidateId={candidate.id}
+                          label={scheduleActionLabel(aiOutput)}
+                        />
                       )}
                       {canAnalyze ? (
                         <form action={analyzeCandidate}>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BriefcaseBusiness, ClipboardList, FileText, MessageSquareText, Stamp } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, ClipboardList, FileText, MessageSquareText } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
@@ -46,12 +46,10 @@ function candidateRole(row: RecentCandidate) {
   return row.current_position || row.ai_candidate_output?.extracted_profile?.currentRole || "Role not provided";
 }
 
-function recentCandidateStatus(row: RecentCandidate) {
-  if (row.ai_candidate_output?.status === "ready") {
-    return "Analyzed";
-  }
+function recentCandidateAiScore(row: RecentCandidate) {
+  const score = row.initial_fit_score ?? row.ai_candidate_output?.initial_fit_score;
 
-  return row.ai_candidate_output?.status ?? "Submitted";
+  return typeof score === "number" ? `AI score: ${score}` : "AI score pending";
 }
 
 const flow = [
@@ -68,7 +66,7 @@ const flow = [
     icon: ClipboardList,
   },
   {
-    title: "Review pipeline",
+    title: "view candidate list",
     description: "Search applicants, review statuses, and open candidate summaries.",
     href: "/candidates",
     icon: FileText,
@@ -78,12 +76,6 @@ const flow = [
     description: "Use candidate evidence to suggest practical follow-up questions.",
     href: "/candidates",
     icon: MessageSquareText,
-  },
-  {
-    title: "Generate memo",
-    description: "Produce a concise recommendation managers can act on.",
-    href: "/candidates",
-    icon: Stamp,
   },
 ];
 
@@ -194,7 +186,7 @@ export default async function Home() {
                         ) : null}
                       </div>
                       <span className="shrink-0 rounded-full border border-ink/20 bg-paper px-3 py-1 text-xs font-black text-ink">
-                        {recentCandidateStatus(candidate)}
+                        {recentCandidateAiScore(candidate)}
                       </span>
                     </div>
                   </Link>
