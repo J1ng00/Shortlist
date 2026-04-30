@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, RefreshCw } from "lucide-react";
 
 import { LiveInterviewRoom } from "@/components/live-interview-room";
 import { Card, Pill } from "@/components/ui";
@@ -8,11 +9,10 @@ import { Card, Pill } from "@/components/ui";
 type LiveInterviewConsoleProps = {
   candidateId: string;
   candidateName: string;
-  companyName: string;
+  initialSuggestions?: LiveSuggestions;
   latestSessionId?: string;
   initialNotes: string;
   participantRole: "manager" | "candidate";
-  roleTitle: string;
   roomName: string;
 };
 
@@ -183,11 +183,10 @@ function uniqueItems(items: string[]) {
 export function LiveInterviewConsole({
   candidateId,
   candidateName,
-  companyName,
+  initialSuggestions = emptySuggestions,
   initialNotes,
   latestSessionId,
   participantRole,
-  roleTitle,
   roomName
 }: LiveInterviewConsoleProps) {
   const [isRoomConnected, setIsRoomConnected] = useState(false);
@@ -197,7 +196,9 @@ export function LiveInterviewConsole({
   const [status, setStatus] = useState<TranscriptionStatus>("idle");
   const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
   const [transcriptionError, setTranscriptionError] = useState("");
-  const [suggestions, setSuggestions] = useState<LiveSuggestions>(emptySuggestions);
+  const [suggestions, setSuggestions] = useState<LiveSuggestions>(() => mergeSuggestions(emptySuggestions, initialSuggestions));
+  const [isAiSectionOpen, setIsAiSectionOpen] = useState(true);
+  const [isTranscriptSectionOpen, setIsTranscriptSectionOpen] = useState(false);
   const [coveredQuestions, setCoveredQuestions] = useState<Set<string>>(() => new Set());
   const [manuallyUncoveredQuestions, setManuallyUncoveredQuestions] = useState<Set<string>>(() => new Set());
   const [manualMeetingNote, setManualMeetingNote] = useState("");
@@ -650,16 +651,17 @@ export function LiveInterviewConsole({
     <div className="relative">
       {isPanelVisible ? null : (
         <button
-          className="absolute right-0 top-0 z-10 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink shadow-soft transition hover:border-ink/40"
+          aria-label="Show AI panel"
+          className="absolute right-0 top-6 z-30 flex h-14 w-10 items-center justify-center rounded-l-2xl bg-clay text-navy shadow-[0_12px_28px_rgba(159,186,242,0.16)] transition-all duration-200 ease-out hover:translate-x-0.5 hover:bg-clay/85 active:scale-95"
           type="button"
           onClick={() => setIsPanelVisible(true)}
         >
-          Show AI panel
+          <ChevronLeft className="h-5 w-5" />
         </button>
       )}
       <div
-        className={`grid items-start gap-4 ${
-          isPanelVisible ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,400px)]" : "xl:grid-cols-1"
+        className={`grid items-start gap-4 transition-[grid-template-columns] duration-300 ease-out ${
+          isPanelVisible ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,400px)]" : "xl:grid-cols-[minmax(0,1fr)_0px]"
         }`}
       >
         <div className="min-w-0 space-y-3">
@@ -695,8 +697,11 @@ export function LiveInterviewConsole({
         </div>
 
         <aside
-          className={`space-y-3 overflow-y-auto pr-1 xl:max-h-[calc(100vh-8rem)] ${
-            isPanelVisible ? "block" : "hidden"
+          aria-hidden={!isPanelVisible}
+          className={`relative overflow-visible pr-1 transition-all duration-300 ease-out ${
+            isPanelVisible
+              ? "pointer-events-auto translate-x-0 opacity-100"
+              : "pointer-events-none translate-x-4 opacity-0"
           }`}
         >
         {isCandidate ? (
@@ -718,36 +723,52 @@ export function LiveInterviewConsole({
         ) : null}
 
         {isCandidate ? null : (
-          <Card className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
+          <div className="relative overflow-visible before:absolute before:inset-y-0 before:left-0 before:z-20 before:w-2 before:bg-clay before:content-['']">
+            <button
+              aria-label="Hide AI panel"
+              className="absolute -left-9 top-8 z-30 flex h-14 w-10 items-center justify-center rounded-l-2xl bg-clay text-navy shadow-[0_12px_28px_rgba(159,186,242,0.16)] transition-all duration-200 ease-out hover:-translate-x-0.5 hover:bg-clay/85 active:scale-95"
+              type="button"
+              onClick={() => setIsPanelVisible(false)}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          <Card className="relative z-10 space-y-3 rounded-l-none border-l-0 p-3 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
+            <section className="rounded-2xl border border-ink/10 bg-white/70">
+              <div className="flex w-full items-center justify-between gap-3 p-4">
                 <h2 className="text-xl font-black">AI copilot</h2>
-                <p className="mt-1 text-sm leading-5 text-ink/60">
-                  Refreshes every few seconds from the transcript and candidate analysis.
-                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    aria-label={suggestionsLoading ? "Updating suggestions" : "Refresh suggestions"}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-ink/20 bg-paper text-navy transition hover:border-ink/40 hover:bg-white disabled:cursor-wait disabled:opacity-60"
+                    disabled={suggestionsLoading}
+                    title={suggestionsLoading ? "Updating suggestions" : "Refresh suggestions"}
+                    type="button"
+                    onClick={refreshSuggestions}
+                  >
+                    {suggestionsLoading ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    aria-label={isAiSectionOpen ? "Collapse AI copilot" : "Expand AI copilot"}
+                    className="flex h-9 w-9 items-center justify-center text-ink/60 transition hover:text-ink"
+                    type="button"
+                    onClick={() => setIsAiSectionOpen((currentValue) => !currentValue)}
+                  >
+                <ChevronDown
+                  className={`h-5 w-5 text-ink/60 transition ${isAiSectionOpen ? "rotate-180" : ""}`}
+                />
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-wrap justify-end gap-2">
-                <button
-                  className="rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
-                  type="button"
-                  onClick={() => setIsPanelVisible(false)}
-                >
-                  Hide AI panel
-                </button>
-                <button
-                  className="rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-wait disabled:opacity-60"
-                  disabled={suggestionsLoading}
-                  type="button"
-                  onClick={refreshSuggestions}
-                >
-                  {suggestionsLoading ? "Updating..." : "Refresh suggestions"}
-                </button>
-              </div>
-            </div>
+              {isAiSectionOpen ? (
+                <div className="px-4 pb-4">
             {suggestionsError ? (
               <p className="mt-4 rounded-2xl bg-clay/10 p-3 text-sm font-bold text-clay">{suggestionsError}</p>
             ) : null}
-            <div className="mt-3 grid max-h-[28rem] gap-3 overflow-y-auto pr-1">
+            <div className="grid max-h-[28rem] gap-3 overflow-y-auto pr-1">
               <FollowUpQuestionSection
                 coveredQuestions={coveredQuestions}
                 emptyText="No follow-up questions yet."
@@ -790,96 +811,45 @@ export function LiveInterviewConsole({
                 items={suggestions.evidenceCaptured}
                 title="Evidence captured"
               />
-              <div className="rounded-2xl border border-ink/10 bg-white/70 p-4">
-                <h3 className="text-sm font-black text-ink">Add meeting note</h3>
-                <textarea
-                  className="mt-3 min-h-20 w-full resize-none rounded-2xl border border-ink/10 bg-paper p-3 text-sm leading-6 outline-none focus:border-clay"
-                  placeholder="Add a concise AI meeting note, e.g. Candidate gave strong evidence for customer support experience."
-                  value={manualMeetingNote}
-                  onChange={(event) => setManualMeetingNote(event.target.value)}
-                />
-                <button
-                  className="mt-3 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!manualMeetingNote.trim()}
-                  type="button"
-                  onClick={() => void addManualMeetingNote()}
-                >
-                  Add note
-                </button>
-              </div>
-              <SuggestionSection
-                bullet
-                emptyText="No meeting notes yet."
+              <MeetingNotesSection
                 items={suggestions.meetingNotes}
-                title="Meeting notes"
+                manualMeetingNote={manualMeetingNote}
+                onAddNote={() => void addManualMeetingNote()}
+                onManualMeetingNoteChange={setManualMeetingNote}
               />
             </div>
-          </Card>
-        )}
-          <Card className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-black">Session</h2>
-            <Pill tone={latestSessionId ? "good" : "warn"}>{latestSessionId ? "Scheduled" : "No session yet"}</Pill>
-          </div>
-          <div className="mt-3 space-y-2 text-sm leading-5 text-ink/70">
-            <p>
-              <strong className="text-ink">Candidate:</strong> {candidateName}
-            </p>
-            <p>
-              <strong className="text-ink">You are joining as:</strong> {participantName}
-            </p>
-            <p>
-              <strong className="text-ink">Role:</strong> {roleTitle}
-            </p>
-            <p>
-              <strong className="text-ink">Company:</strong> {companyName}
-            </p>
-            {latestSessionId ? (
-              <p>
-                <strong className="text-ink">Session id:</strong> {latestSessionId}
-              </p>
-            ) : null}
-          </div>
-        </Card>
+                </div>
+              ) : null}
+            </section>
 
-          <Card className="p-4">
-            <details>
-              <summary className="cursor-pointer list-none text-xl font-black text-ink [&::-webkit-details-marker]:hidden">
-                Full transcript / notes
-              </summary>
-              <p className="mt-2 text-sm leading-5 text-ink/60">
-                Raw transcript is saved to interview session notes. Manual edits here are local fallback notes only.
-              </p>
+          <section className="rounded-2xl border border-ink/10 bg-white/70">
+            <button
+              className="flex w-full items-center justify-between gap-3 p-4 text-left"
+              type="button"
+              onClick={() => setIsTranscriptSectionOpen((currentValue) => !currentValue)}
+            >
+              <h2 className="text-xl font-black">Full transcript</h2>
+              <ChevronDown
+                className={`h-5 w-5 text-ink/60 transition ${isTranscriptSectionOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+            {isTranscriptSectionOpen ? (
+              <div className="px-4 pb-4">
               {transcriptionError ? (
                 <p className="mt-4 rounded-2xl bg-clay/10 p-3 text-sm font-bold text-clay">{transcriptionError}</p>
               ) : null}
-              <div
-                ref={transcriptScrollRef}
-                className="mt-3 h-36 space-y-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white/70 p-3"
-              >
-                {transcriptLines.length > 0 ? (
-                  transcriptLines.map((line) => (
-                    <div key={line.id} className="text-sm leading-6">
-                      <p className="font-black text-ink">
-                        {line.speaker} <span className="font-semibold text-ink/40">{line.timestamp}</span>
-                      </p>
-                      <p className="text-ink/70">{line.text}</p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm leading-6 text-ink/50">
-                    Join the room and speak into your mic. Transcript lines will appear after you pause speaking.
-                  </p>
-                )}
-              </div>
               <textarea
-                className="mt-3 min-h-20 w-full resize-none rounded-2xl border border-ink/10 bg-white/70 p-3 text-sm leading-6 outline-none focus:border-clay"
+                className="min-h-36 w-full resize-none rounded-2xl border border-ink/10 bg-white/70 p-3 text-sm leading-6 outline-none focus:border-clay"
                 placeholder="Manual fallback: type or paste transcript notes here if automatic transcription is unavailable."
                 value={manualNotes}
                 onChange={(event) => setManualNotes(event.target.value)}
               />
-            </details>
+              </div>
+            ) : null}
+          </section>
           </Card>
+          </div>
+        )}
         </aside>
       </div>
     </div>
@@ -964,6 +934,51 @@ function SuggestionSection({
           <li className="text-sm leading-6 text-ink/45">{emptyText}</li>
         )}
       </ul>
+    </div>
+  );
+}
+
+function MeetingNotesSection({
+  items,
+  manualMeetingNote,
+  onAddNote,
+  onManualMeetingNoteChange
+}: {
+  items: string[];
+  manualMeetingNote: string;
+  onAddNote: () => void;
+  onManualMeetingNoteChange: (note: string) => void;
+}) {
+  const notes = uniqueItems(items);
+
+  return (
+    <div className="rounded-2xl border border-ink/10 bg-white/70 p-4">
+      <h3 className="text-sm font-black text-ink">Meeting notes</h3>
+      <ul className="mt-3 list-disc space-y-2 pl-5">
+        {notes.length > 0 ? (
+          notes.slice(0, 4).map((item) => (
+            <li key={item} className="pl-1 text-sm leading-6 text-ink/70">
+              {item}
+            </li>
+          ))
+        ) : (
+          <li className="list-none text-sm leading-6 text-ink/45">No meeting notes yet.</li>
+        )}
+      </ul>
+      <textarea
+        className="mt-3 min-h-20 w-full resize-none rounded-2xl border border-ink/10 bg-paper p-3 text-sm leading-6 outline-none focus:border-clay"
+        placeholder="Add a concise AI meeting note, e.g. Candidate gave strong evidence for customer support experience."
+        value={manualMeetingNote}
+        onChange={(event) => onManualMeetingNoteChange(event.target.value)}
+      />
+      <button
+        className="mt-3 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={!manualMeetingNote.trim()}
+        type="button"
+        onClick={onAddNote}
+      >
+        Add note
+      </button>
     </div>
   );
 }

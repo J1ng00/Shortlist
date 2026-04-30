@@ -9,16 +9,27 @@ type PageShellProps = {
   title: string;
   description: ReactNode;
   actions?: ReactNode;
+  backAction?: ReactNode;
   children: ReactNode;
   focused?: boolean;
 };
 
-export function PageShell({ eyebrow, prefix, title, description, actions, children, focused = false }: PageShellProps) {
+export function PageShell({
+  eyebrow,
+  prefix,
+  title,
+  description,
+  actions,
+  backAction,
+  children,
+  focused = false
+}: PageShellProps) {
   if (focused) {
     return (
       <AppShell focused>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
+            {backAction ? <div className="mb-2">{backAction}</div> : null}
             {prefix ? <div className="mb-2">{prefix}</div> : null}
             {eyebrow ? <p className="text-xs font-black uppercase text-ink">{eyebrow}</p> : null}
             <h1 className="truncate text-2xl font-black text-navy">{title}</h1>

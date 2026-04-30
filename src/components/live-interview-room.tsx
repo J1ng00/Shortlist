@@ -8,7 +8,7 @@ import {
 } from "@livekit/components-react";
 import { useEffect, useState, useTransition } from "react";
 
-import { Card, Pill } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 type LiveInterviewRoomProps = {
@@ -72,7 +72,6 @@ export function LiveInterviewRoom({
             <p className="text-sm font-bold text-paper/60">Meeting room</p>
             <h2 className="mt-1 text-3xl font-black">LiveKit interview room</h2>
           </div>
-          <Pill tone="neutral">Ready</Pill>
         </div>
         <div className="mt-8 grid min-h-72 place-items-center rounded-3xl border border-paper/15 bg-paper/10 p-6 text-center">
           <div>
