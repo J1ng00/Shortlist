@@ -4,6 +4,7 @@ import { ArrowUpRight, BriefcaseBusiness, Github, Linkedin, Search, Sparkles, Us
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
 import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
+import { ScheduleInterviewModal } from "@/components/candidates/schedule-interview-modal";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { analyzeCandidate, updateCandidateDecision } from "./[id]/actions";
 
@@ -326,11 +327,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                       ) : null}
                     </div>
                     <div className="mt-4 grid gap-2">
-                      <form action={updateCandidateDecision}>
-                        <input name="candidate_id" type="hidden" value={row.id} />
-                        <input name="outcome" type="hidden" value="next_stage" />
-                        <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Next stage</ActionSubmitButton>
-                      </form>
+                      <ScheduleInterviewModal action={updateCandidateDecision} candidateId={row.id} label="Next stage" variant="secondary" />
                       <form action={updateCandidateDecision}>
                         <input name="candidate_id" type="hidden" value={row.id} />
                         <input name="outcome" type="hidden" value="rejected" />
