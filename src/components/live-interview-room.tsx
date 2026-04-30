@@ -9,9 +9,11 @@ import {
 import { useEffect, useState, useTransition } from "react";
 
 import { Card, Pill } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
 type LiveInterviewRoomProps = {
   candidateName: string;
+  className?: string;
   onConnectedChange?: (isConnected: boolean) => void;
   onMicrophoneEnabledChange?: (isEnabled: boolean) => void;
   participantName: string;
@@ -25,6 +27,7 @@ type TokenResponse = {
 
 export function LiveInterviewRoom({
   candidateName,
+  className,
   onConnectedChange,
   onMicrophoneEnabledChange,
   participantName,
@@ -63,7 +66,7 @@ export function LiveInterviewRoom({
 
   if (!connection) {
     return (
-      <Card className="min-h-[28rem] bg-ink text-paper">
+      <Card className={cn("min-h-[28rem] bg-ink text-paper", className)}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-paper/60">Meeting room</p>
@@ -96,7 +99,7 @@ export function LiveInterviewRoom({
   }
 
   return (
-    <Card className="overflow-hidden bg-ink p-0 text-paper">
+    <Card className={cn("overflow-hidden bg-ink p-0 text-paper", className)}>
       <LiveKitRoom
         key={connection.token}
         audio
@@ -105,7 +108,7 @@ export function LiveInterviewRoom({
         data-lk-theme="default"
         serverUrl={connection.url}
         token={connection.token}
-        className="min-h-[36rem]"
+        className="min-h-[30rem] lg:h-[calc(100vh-10.5rem)]"
         onConnected={() => onConnectedChange?.(true)}
         onDisconnected={() => {
           onConnectedChange?.(false);

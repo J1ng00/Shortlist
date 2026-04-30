@@ -6,6 +6,7 @@ import { LiveInterviewRoom } from "@/components/live-interview-room";
 import { Card, Pill } from "@/components/ui";
 
 type LiveInterviewConsoleProps = {
+  candidateId: string;
   candidateName: string;
   companyName: string;
   latestSessionId?: string;
@@ -23,6 +24,22 @@ type TranscriptLine = {
 };
 
 type TranscriptionStatus = "idle" | "starting" | "listening" | "transcribing" | "paused" | "error";
+
+type LiveSuggestions = {
+  followUpQuestions: string[];
+  coveredFollowUpQuestions: string[];
+  flags: string[];
+  evidenceCaptured: string[];
+  meetingNotes: string[];
+};
+
+const emptySuggestions: LiveSuggestions = {
+  followUpQuestions: [],
+  coveredFollowUpQuestions: [],
+  flags: [],
+  evidenceCaptured: [],
+  meetingNotes: []
+};
 
 declare global {
   interface Window {
@@ -72,7 +89,99 @@ function parseTranscriptNotes(notes: string, speakerFilter?: "Manager" | "Candid
     .filter((line): line is TranscriptLine => Boolean(line));
 }
 
+function mergeUniqueItems(currentItems: string[], incomingItems: string[] | undefined) {
+  const mergedItems = [...currentItems];
+  const seenItems = new Set(currentItems);
+
+  for (const item of incomingItems ?? []) {
+    const trimmedItem = item.trim();
+
+    if (trimmedItem && !seenItems.has(trimmedItem)) {
+      mergedItems.push(trimmedItem);
+      seenItems.add(trimmedItem);
+    }
+  }
+
+  return mergedItems;
+}
+
+function mergeSuggestions(currentSuggestions: LiveSuggestions, incomingSuggestions: LiveSuggestions): LiveSuggestions {
+  return {
+    followUpQuestions: mergeUniqueItems(currentSuggestions.followUpQuestions, incomingSuggestions.followUpQuestions),
+    coveredFollowUpQuestions: mergeUniqueItems(
+      currentSuggestions.coveredFollowUpQuestions,
+      incomingSuggestions.coveredFollowUpQuestions
+    ),
+    flags: mergeUniqueItems(currentSuggestions.flags, incomingSuggestions.flags),
+    evidenceCaptured: mergeUniqueItems(currentSuggestions.evidenceCaptured, incomingSuggestions.evidenceCaptured),
+    meetingNotes: mergeUniqueItems(currentSuggestions.meetingNotes, incomingSuggestions.meetingNotes)
+  };
+}
+
+function normalizedWords(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 3);
+}
+
+function isSimilarText(firstText: string, secondText: string) {
+  const firstWords = new Set(normalizedWords(firstText));
+  const secondWords = new Set(normalizedWords(secondText));
+
+  if (firstWords.size === 0 || secondWords.size === 0) {
+    return false;
+  }
+
+  const sharedWordCount = [...firstWords].filter((word) => secondWords.has(word)).length;
+  const largerWordCount = Math.max(firstWords.size, secondWords.size);
+
+  return sharedWordCount >= 4 && sharedWordCount / largerWordCount >= 0.75;
+}
+
+function setContainsSimilarText(items: Set<string>, item: string) {
+  return [...items].some((currentItem) => currentItem === item || isSimilarText(currentItem, item));
+}
+
+function cleanQuestionText(question: string) {
+  return question.split(/\s[-–—]\s/)[0]?.trim() ?? question.trim();
+}
+
+function uniqueCleanItems(items: string[]) {
+  const seenItems = new Set<string>();
+  const cleanItems: string[] = [];
+
+  for (const item of items) {
+    const cleanItem = cleanQuestionText(item);
+
+    if (cleanItem && !seenItems.has(cleanItem)) {
+      seenItems.add(cleanItem);
+      cleanItems.push(cleanItem);
+    }
+  }
+
+  return cleanItems;
+}
+
+function uniqueItems(items: string[]) {
+  const seenItems = new Set<string>();
+  const cleanItems: string[] = [];
+
+  for (const item of items) {
+    const cleanItem = item.trim();
+
+    if (cleanItem && !seenItems.has(cleanItem)) {
+      seenItems.add(cleanItem);
+      cleanItems.push(cleanItem);
+    }
+  }
+
+  return cleanItems;
+}
+
 export function LiveInterviewConsole({
+  candidateId,
   candidateName,
   companyName,
   initialNotes,
@@ -83,10 +192,17 @@ export function LiveInterviewConsole({
 }: LiveInterviewConsoleProps) {
   const [isRoomConnected, setIsRoomConnected] = useState(false);
   const [isLiveKitMicEnabled, setIsLiveKitMicEnabled] = useState(false);
+  const [isPanelVisible, setIsPanelVisible] = useState(true);
   const [manualNotes, setManualNotes] = useState(initialNotes);
   const [status, setStatus] = useState<TranscriptionStatus>("idle");
   const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
   const [transcriptionError, setTranscriptionError] = useState("");
+  const [suggestions, setSuggestions] = useState<LiveSuggestions>(emptySuggestions);
+  const [coveredQuestions, setCoveredQuestions] = useState<Set<string>>(() => new Set());
+  const [manuallyUncoveredQuestions, setManuallyUncoveredQuestions] = useState<Set<string>>(() => new Set());
+  const [manualMeetingNote, setManualMeetingNote] = useState("");
+  const [suggestionsError, setSuggestionsError] = useState("");
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -97,6 +213,8 @@ export function LiveInterviewConsole({
   const silenceStartedAtRef = useRef<number | null>(null);
   const notesBaselineRef = useRef(initialNotes);
   const savedNotesRef = useRef(initialNotes);
+  const hasLoadedInitialSuggestionsRef = useRef(false);
+  const suggestionsRequestInFlightRef = useRef(false);
   const isCandidate = participantRole === "candidate";
   const participantName = isCandidate ? candidateName : "Hiring manager";
   const speakerLabel = isCandidate ? "Candidate" : "Manager";
@@ -371,6 +489,153 @@ export function LiveInterviewConsole({
     }
   }, [transcriptLines]);
 
+  const refreshSuggestions = useCallback(async () => {
+    if (!latestSessionId || isCandidate || suggestionsRequestInFlightRef.current) {
+      return;
+    }
+
+    suggestionsRequestInFlightRef.current = true;
+    setSuggestionsLoading(true);
+    setSuggestionsError("");
+
+    try {
+      const response = await fetch("/api/interview/live-suggestions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          candidateId,
+          sessionId: latestSessionId
+        })
+      });
+      const payload = (await response.json()) as {
+        data?: LiveSuggestions;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to generate live suggestions.");
+      }
+
+      if (payload.data) {
+        setSuggestions((currentSuggestions) => mergeSuggestions(currentSuggestions, payload.data ?? emptySuggestions));
+      }
+
+      if (payload.error) {
+        setSuggestionsError(payload.error);
+      }
+    } catch (error) {
+      setSuggestionsError(error instanceof Error ? error.message : "Unable to generate live suggestions.");
+    } finally {
+      suggestionsRequestInFlightRef.current = false;
+      setSuggestionsLoading(false);
+    }
+  }, [candidateId, isCandidate, latestSessionId, manuallyUncoveredQuestions]);
+
+  const addManualMeetingNote = useCallback(async () => {
+    const trimmedNote = manualMeetingNote.trim();
+
+    if (!trimmedNote) {
+      return;
+    }
+
+    setSuggestions((currentSuggestions) =>
+      mergeSuggestions(currentSuggestions, {
+        ...emptySuggestions,
+        meetingNotes: [trimmedNote]
+      })
+    );
+    setManualMeetingNote("");
+
+    if (!latestSessionId) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/interview/live-notes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          meetingNote: trimmedNote,
+          sessionId: latestSessionId
+        })
+      });
+      const payload = (await response.json()) as { data?: LiveSuggestions; error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to save meeting note.");
+      }
+
+      if (payload.data) {
+        setSuggestions((currentSuggestions) => mergeSuggestions(currentSuggestions, payload.data ?? emptySuggestions));
+      }
+    } catch (error) {
+      setSuggestionsError(error instanceof Error ? error.message : "Unable to save meeting note.");
+    }
+  }, [latestSessionId, manualMeetingNote]);
+
+  useEffect(() => {
+    if (suggestions.followUpQuestions.length === 0) {
+      return;
+    }
+
+    const managerTranscriptLines = transcriptLines.filter((line) => line.speaker === "Manager");
+
+    if (managerTranscriptLines.length === 0) {
+      return;
+    }
+
+    setCoveredQuestions((currentQuestions) => {
+      const nextQuestions = new Set(currentQuestions);
+      let hasNewCoveredQuestion = false;
+
+      for (const question of suggestions.followUpQuestions) {
+        if (
+          setContainsSimilarText(manuallyUncoveredQuestions, cleanQuestionText(question)) ||
+          setContainsSimilarText(nextQuestions, cleanQuestionText(question))
+        ) {
+          continue;
+        }
+
+        const wasAskedByManager = managerTranscriptLines.some((line) => isSimilarText(line.text, cleanQuestionText(question)));
+
+        if (wasAskedByManager) {
+          nextQuestions.add(cleanQuestionText(question));
+          hasNewCoveredQuestion = true;
+        }
+      }
+
+      return hasNewCoveredQuestion ? nextQuestions : currentQuestions;
+    });
+  }, [manuallyUncoveredQuestions, suggestions.followUpQuestions, transcriptLines]);
+
+  useEffect(() => {
+    if (isCandidate || !candidateId || !latestSessionId || hasLoadedInitialSuggestionsRef.current) {
+      return;
+    }
+
+    hasLoadedInitialSuggestionsRef.current = true;
+    void refreshSuggestions();
+  }, [candidateId, isCandidate, latestSessionId, refreshSuggestions]);
+
+  useEffect(() => {
+    if (!isRoomConnected || isCandidate || !latestSessionId) {
+      return;
+    }
+
+    void refreshSuggestions();
+    const intervalId = window.setInterval(() => {
+      void refreshSuggestions();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isCandidate, isRoomConnected, latestSessionId, refreshSuggestions]);
+
   const statusLabel = {
     idle: "Idle",
     starting: "Starting",
@@ -379,24 +644,184 @@ export function LiveInterviewConsole({
     paused: "Paused",
     error: "Error"
   }[status];
+  const latestTranscriptLines = transcriptLines.slice(-3);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-      <LiveInterviewRoom
-        candidateName={candidateName}
-        participantName={participantName}
-        roomName={roomName}
-        onConnectedChange={handleRoomConnectedChange}
-        onMicrophoneEnabledChange={setIsLiveKitMicEnabled}
-      />
+    <div className="relative">
+      {isPanelVisible ? null : (
+        <button
+          className="absolute right-0 top-0 z-10 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink shadow-soft transition hover:border-ink/40"
+          type="button"
+          onClick={() => setIsPanelVisible(true)}
+        >
+          Show AI panel
+        </button>
+      )}
+      <div
+        className={`grid items-start gap-4 ${
+          isPanelVisible ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,400px)]" : "xl:grid-cols-1"
+        }`}
+      >
+        <div className="min-w-0 space-y-3">
+          <LiveInterviewRoom
+            candidateName={candidateName}
+            className="lg:min-h-[calc(100vh-10.5rem)]"
+            participantName={participantName}
+            roomName={roomName}
+            onConnectedChange={handleRoomConnectedChange}
+            onMicrophoneEnabledChange={setIsLiveKitMicEnabled}
+          />
+          <div className="min-h-24 rounded-3xl border border-ink/10 bg-ink p-4 text-paper shadow-soft">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-black text-paper/70">Live transcript</p>
+              <Pill tone={status === "error" ? "warn" : status === "listening" ? "good" : "neutral"}>
+                {statusLabel}
+              </Pill>
+            </div>
+            <div className="mt-3 max-h-24 space-y-2 overflow-hidden">
+              {latestTranscriptLines.length > 0 ? (
+                latestTranscriptLines.map((line) => (
+                  <p key={line.id} className="truncate text-sm leading-5 text-paper/80">
+                    <span className="font-black text-paper">{line.speaker}:</span> {line.text}
+                  </p>
+                ))
+              ) : (
+                <p className="text-sm leading-5 text-paper/55">
+                  Latest transcript lines will appear here during the current session.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
 
-      <div className="space-y-6">
-        <Card>
+        <aside
+          className={`space-y-3 overflow-y-auto pr-1 xl:max-h-[calc(100vh-8rem)] ${
+            isPanelVisible ? "block" : "hidden"
+          }`}
+        >
+        {isCandidate ? (
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-black">Candidate mode</h2>
+              <Pill tone={status === "error" ? "warn" : status === "listening" ? "good" : "neutral"}>
+                {statusLabel}
+              </Pill>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-ink/70">
+              You are joining as {candidateName}. Your microphone is transcribed as Candidate after short pauses in
+              speech for this demo. Muting your LiveKit microphone pauses transcription too.
+            </p>
+            {transcriptionError ? (
+              <p className="mt-4 rounded-2xl bg-clay/10 p-3 text-sm font-bold text-clay">{transcriptionError}</p>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {isCandidate ? null : (
+          <Card className="p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black">AI copilot</h2>
+                <p className="mt-1 text-sm leading-5 text-ink/60">
+                  Refreshes every few seconds from the transcript and candidate analysis.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  className="rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
+                  type="button"
+                  onClick={() => setIsPanelVisible(false)}
+                >
+                  Hide AI panel
+                </button>
+                <button
+                  className="rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-wait disabled:opacity-60"
+                  disabled={suggestionsLoading}
+                  type="button"
+                  onClick={refreshSuggestions}
+                >
+                  {suggestionsLoading ? "Updating..." : "Refresh suggestions"}
+                </button>
+              </div>
+            </div>
+            {suggestionsError ? (
+              <p className="mt-4 rounded-2xl bg-clay/10 p-3 text-sm font-bold text-clay">{suggestionsError}</p>
+            ) : null}
+            <div className="mt-3 grid max-h-[28rem] gap-3 overflow-y-auto pr-1">
+              <FollowUpQuestionSection
+                coveredQuestions={coveredQuestions}
+                emptyText="No follow-up questions yet."
+                items={suggestions.followUpQuestions}
+                manuallyUncoveredQuestions={manuallyUncoveredQuestions}
+                onToggleQuestion={(question) => {
+                  const cleanQuestion = cleanQuestionText(question);
+                  const isCurrentlyCovered =
+                    setContainsSimilarText(coveredQuestions, cleanQuestion) &&
+                    !setContainsSimilarText(manuallyUncoveredQuestions, cleanQuestion);
+
+                  setCoveredQuestions((currentQuestions) => {
+                    const nextQuestions = new Set(currentQuestions);
+
+                    if (isCurrentlyCovered) {
+                      nextQuestions.delete(cleanQuestion);
+                    } else {
+                      nextQuestions.add(cleanQuestion);
+                    }
+
+                    return nextQuestions;
+                  });
+                  setManuallyUncoveredQuestions((currentQuestions) => {
+                    const nextQuestions = new Set(currentQuestions);
+
+                    if (isCurrentlyCovered) {
+                      nextQuestions.add(cleanQuestion);
+                    } else {
+                      nextQuestions.delete(cleanQuestion);
+                    }
+
+                    return nextQuestions;
+                  });
+                }}
+                title="Follow-up questions"
+              />
+              <SuggestionSection emptyText="No flags yet." items={suggestions.flags} title="Flags" />
+              <SuggestionSection
+                emptyText="No evidence captured yet."
+                items={suggestions.evidenceCaptured}
+                title="Evidence captured"
+              />
+              <div className="rounded-2xl border border-ink/10 bg-white/70 p-4">
+                <h3 className="text-sm font-black text-ink">Add meeting note</h3>
+                <textarea
+                  className="mt-3 min-h-20 w-full resize-none rounded-2xl border border-ink/10 bg-paper p-3 text-sm leading-6 outline-none focus:border-clay"
+                  placeholder="Add a concise AI meeting note, e.g. Candidate gave strong evidence for customer support experience."
+                  value={manualMeetingNote}
+                  onChange={(event) => setManualMeetingNote(event.target.value)}
+                />
+                <button
+                  className="mt-3 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!manualMeetingNote.trim()}
+                  type="button"
+                  onClick={() => void addManualMeetingNote()}
+                >
+                  Add note
+                </button>
+              </div>
+              <SuggestionSection
+                bullet
+                emptyText="No meeting notes yet."
+                items={suggestions.meetingNotes}
+                title="Meeting notes"
+              />
+            </div>
+          </Card>
+        )}
+          <Card className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-black">Session</h2>
+            <h2 className="text-xl font-black">Session</h2>
             <Pill tone={latestSessionId ? "good" : "warn"}>{latestSessionId ? "Scheduled" : "No session yet"}</Pill>
           </div>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-ink/70">
+          <div className="mt-3 space-y-2 text-sm leading-5 text-ink/70">
             <p>
               <strong className="text-ink">Candidate:</strong> {candidateName}
             </p>
@@ -417,80 +842,128 @@ export function LiveInterviewConsole({
           </div>
         </Card>
 
-        {isCandidate ? (
-          <Card>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-2xl font-black">Candidate mode</h2>
-              <Pill tone={status === "error" ? "warn" : status === "listening" ? "good" : "neutral"}>
-                {statusLabel}
-              </Pill>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-ink/70">
-              You are joining as {candidateName}. Your microphone is transcribed as Candidate after short pauses in
-              speech for this demo. Muting your LiveKit microphone pauses transcription too.
-            </p>
-            {transcriptionError ? (
-              <p className="mt-4 rounded-2xl bg-clay/10 p-3 text-sm font-bold text-clay">{transcriptionError}</p>
-            ) : null}
-          </Card>
-        ) : (
-          <Card>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-2xl font-black">Live transcript</h2>
-              <Pill tone={status === "error" ? "warn" : status === "listening" ? "good" : "neutral"}>
-                {statusLabel}
-              </Pill>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-ink/60">
-              Manager and candidate browsers each transcribe their own microphone after short pauses in speech.
-              Successful transcript lines are saved to the current interview session notes. Muting your LiveKit
-              microphone pauses transcription too.
-            </p>
-            {transcriptionError ? (
-              <p className="mt-4 rounded-2xl bg-clay/10 p-3 text-sm font-bold text-clay">{transcriptionError}</p>
-            ) : null}
-            <div
-              ref={transcriptScrollRef}
-              className="mt-4 h-60 space-y-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white/70 p-4"
-            >
-              {transcriptLines.length > 0 ? (
-                transcriptLines.map((line) => (
-                  <div key={line.id} className="text-sm leading-6">
-                    <p className="font-black text-ink">
-                      {line.speaker} <span className="font-semibold text-ink/40">{line.timestamp}</span>
-                    </p>
-                    <p className="text-ink/70">{line.text}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm leading-6 text-ink/50">
-                  Join the room and speak into your mic. Transcript lines will appear after you pause speaking.
-                </p>
-              )}
-            </div>
-            <textarea
-              className="mt-4 min-h-36 w-full resize-none rounded-2xl border border-ink/10 bg-white/70 p-4 text-sm leading-6 outline-none focus:border-clay"
-              placeholder="Manual fallback: type or paste transcript notes here if automatic transcription is unavailable."
-              value={manualNotes}
-              onChange={(event) => setManualNotes(event.target.value)}
-            />
-          </Card>
-        )}
-
-        {isCandidate ? null : (
-          <Card>
-            <h2 className="text-2xl font-black">AI copilot</h2>
-            <div className="mt-4 space-y-3">
-              <div className="rounded-2xl bg-moss/10 p-4 text-sm leading-6 text-ink/70">
-                Next step: send the rolling transcript to the copilot API for live follow-up suggestions.
+          <Card className="p-4">
+            <details>
+              <summary className="cursor-pointer list-none text-xl font-black text-ink [&::-webkit-details-marker]:hidden">
+                Full transcript / notes
+              </summary>
+              <p className="mt-2 text-sm leading-5 text-ink/60">
+                Raw transcript is saved to interview session notes. Manual edits here are local fallback notes only.
+              </p>
+              {transcriptionError ? (
+                <p className="mt-4 rounded-2xl bg-clay/10 p-3 text-sm font-bold text-clay">{transcriptionError}</p>
+              ) : null}
+              <div
+                ref={transcriptScrollRef}
+                className="mt-3 h-36 space-y-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white/70 p-3"
+              >
+                {transcriptLines.length > 0 ? (
+                  transcriptLines.map((line) => (
+                    <div key={line.id} className="text-sm leading-6">
+                      <p className="font-black text-ink">
+                        {line.speaker} <span className="font-semibold text-ink/40">{line.timestamp}</span>
+                      </p>
+                      <p className="text-ink/70">{line.text}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm leading-6 text-ink/50">
+                    Join the room and speak into your mic. Transcript lines will appear after you pause speaking.
+                  </p>
+                )}
               </div>
-              <div className="rounded-2xl bg-clay/10 p-4 text-sm leading-6 text-ink/70">
-                Missing-evidence flags and rubric updates are not wired in this slice yet.
-              </div>
-            </div>
+              <textarea
+                className="mt-3 min-h-20 w-full resize-none rounded-2xl border border-ink/10 bg-white/70 p-3 text-sm leading-6 outline-none focus:border-clay"
+                placeholder="Manual fallback: type or paste transcript notes here if automatic transcription is unavailable."
+                value={manualNotes}
+                onChange={(event) => setManualNotes(event.target.value)}
+              />
+            </details>
           </Card>
-        )}
+        </aside>
       </div>
+    </div>
+  );
+}
+
+function FollowUpQuestionSection({
+  coveredQuestions,
+  emptyText,
+  items,
+  manuallyUncoveredQuestions,
+  onToggleQuestion,
+  title
+}: {
+  coveredQuestions: Set<string>;
+  emptyText: string;
+  items: string[];
+  manuallyUncoveredQuestions: Set<string>;
+  onToggleQuestion: (question: string) => void;
+  title: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-ink/10 bg-white/70 p-4">
+      <h3 className="text-sm font-black text-ink">{title}</h3>
+      <ul className="mt-3 space-y-2">
+        {items.length > 0 ? (
+          uniqueCleanItems(items)
+            .slice(0, 4)
+            .map((item) => {
+            const isCovered =
+              setContainsSimilarText(coveredQuestions, item) && !setContainsSimilarText(manuallyUncoveredQuestions, item);
+
+            return (
+              <li key={item} className="flex gap-3 text-sm leading-6">
+                <button
+                  aria-label={isCovered ? "Mark follow-up question as not covered" : "Mark follow-up question as covered"}
+                  aria-pressed={isCovered}
+                  className={`mt-1 flex size-5 shrink-0 items-center justify-center rounded-md border text-xs font-black transition ${
+                    isCovered
+                      ? "border-sage bg-sage text-white"
+                      : "border-ink/20 bg-paper text-transparent hover:border-ink/40"
+                  }`}
+                  type="button"
+                  onClick={() => onToggleQuestion(item)}
+                >
+                  ✓
+                </button>
+                <span className={isCovered ? "text-ink/35 line-through" : "text-ink/70"}>{item}</span>
+              </li>
+            );
+          })
+        ) : (
+          <li className="text-sm leading-6 text-ink/45">{emptyText}</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function SuggestionSection({
+  bullet = false,
+  emptyText,
+  items,
+  title
+}: {
+  bullet?: boolean;
+  emptyText: string;
+  items: string[];
+  title: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-ink/10 bg-white/70 p-4">
+      <h3 className="text-sm font-black text-ink">{title}</h3>
+      <ul className={`mt-3 space-y-2 ${bullet ? "list-disc pl-5" : ""}`}>
+        {uniqueItems(items).length > 0 ? (
+          uniqueItems(items).slice(0, 4).map((item) => (
+            <li key={item} className={`text-sm leading-6 text-ink/70 ${bullet ? "pl-1" : ""}`}>
+              {item}
+            </li>
+          ))
+        ) : (
+          <li className="text-sm leading-6 text-ink/45">{emptyText}</li>
+        )}
+      </ul>
     </div>
   );
 }

@@ -97,6 +97,7 @@ export default async function LiveInterviewPage({ params, searchParams }: LiveIn
   return (
     <PageShell
       eyebrow="Live interview"
+      focused
       title={
         participantRole === "candidate"
           ? `${candidateRow.full_name} interview room`
@@ -117,6 +118,7 @@ export default async function LiveInterviewPage({ params, searchParams }: LiveIn
       }
     >
       <LiveInterviewConsole
+        candidateId={candidateRow.id}
         candidateName={candidateRow.full_name}
         companyName={job?.business_name ?? "Unknown company"}
         initialNotes={latestSession?.notes ?? ""}
