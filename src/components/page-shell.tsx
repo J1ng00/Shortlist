@@ -9,11 +9,28 @@ type PageShellProps = {
   description: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
+  focused?: boolean;
 };
 
-export function PageShell({ eyebrow, title, description, actions, children }: PageShellProps) {
+export function PageShell({ eyebrow, title, description, actions, children, focused = false }: PageShellProps) {
+  if (focused) {
+    return (
+      <AppShell focused>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            {eyebrow ? <p className="text-xs font-black uppercase text-ink">{eyebrow}</p> : null}
+            <h1 className="truncate text-2xl font-black text-navy">{title}</h1>
+            <p className="mt-1 max-w-3xl text-sm leading-5 text-navy/65">{description}</p>
+          </div>
+          {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+        </div>
+        {children}
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell>
+    <AppShell focused={focused}>
       <PageHeading
         actions={actions}
         description={description}

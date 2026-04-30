@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { analyzeCandidateById } from "@/lib/candidate-analysis";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -26,6 +27,42 @@ export async function analyzeCandidate(formData: FormData) {
   await analyzeCandidateById(supabase, candidateId);
   revalidatePath("/candidates");
   revalidatePath(`/candidates/${candidateId}`);
+}
+
+export async function createInterviewSession(formData: FormData) {
+  const candidateId = String(formData.get("candidate_id") ?? "").trim();
+
+  if (!candidateId) {
+    throw new Error("Candidate id is required.");
+  }
+
+  const supabase = createServerSupabaseClient();
+  const { data: candidate, error: candidateError } = await supabase
+    .from("candidates")
+    .select("id")
+    .eq("id", candidateId)
+    .maybeSingle();
+
+  if (candidateError) {
+    throw new Error(candidateError.message);
+  }
+
+  if (!candidate) {
+    throw new Error("Candidate must be saved before starting a live interview.");
+  }
+
+  const { error } = await supabase.from("interview_sessions").insert({
+    candidate_id: candidateId,
+    notes: "",
+    ai_interview_output: {},
+    final_decision_output: {}
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  redirect(`/interview/${candidateId}/live`);
 }
 
 export async function updateCandidateDecision(formData: FormData) {

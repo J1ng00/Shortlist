@@ -7,7 +7,7 @@ import { ActionSubmitButton } from "@/components/candidates/action-submit-button
 import { getCandidate, getJob } from "@/lib/mock-data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { Candidate, Job } from "@/lib/types";
-import { analyzeCandidate, updateCandidateDecision } from "./actions";
+import { analyzeCandidate, createInterviewSession, updateCandidateDecision } from "./actions";
 
 type CandidatePageProps = {
   params: Promise<{
@@ -161,6 +161,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
   const recommendationReason = aiOutput.recommendation_reason ?? candidate.aiSummary;
   const nextBestAction = aiOutput.next_best_action ?? "Review the evidence, then choose whether to move the candidate to the next stage or reject them.";
   const canAnalyze = source === "supabase" && aiStatus !== "ready";
+  const candidateIsSaved = source === "supabase";
 
   return (
     <PageShell
@@ -181,6 +182,19 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
           ) : null}
           <ButtonLink href={`/candidates/${candidate.id}/ask-ai`} variant="secondary">Ask AI</ButtonLink>
           <ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>
+          {candidateIsSaved ? (
+            <>
+              <form action={createInterviewSession}>
+                <input name="candidate_id" type="hidden" value={candidate.id} />
+                <ActionSubmitButton pendingLabel="Scheduling..." variant="secondary">
+                  Schedule interview
+                </ActionSubmitButton>
+              </form>
+              <ButtonLink href={`/interview/${candidate.id}/live`} variant="secondary">
+                Join live interview
+              </ButtonLink>
+            </>
+          ) : null}
         </>
       }
     >
