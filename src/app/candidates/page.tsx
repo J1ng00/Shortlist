@@ -92,11 +92,11 @@ function normalizeJob(row: CandidateRow) {
 }
 
 function candidateName(row: CandidateRow) {
-  return row.ai_candidate_output?.extracted_profile?.fullName || row.full_name;
+  return row.full_name || row.ai_candidate_output?.extracted_profile?.fullName || "Unnamed candidate";
 }
 
 function candidateRole(row: CandidateRow) {
-  return row.ai_candidate_output?.extracted_profile?.currentRole || row.current_position || "Role not provided";
+  return row.current_position || row.ai_candidate_output?.extracted_profile?.currentRole || "Role not provided";
 }
 
 function candidateScore(row: CandidateRow) {

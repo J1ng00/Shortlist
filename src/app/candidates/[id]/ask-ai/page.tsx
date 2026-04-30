@@ -30,7 +30,7 @@ export default async function AskAiPage({ params }: AskAiPageProps) {
       fullName?: string;
     };
   };
-  const candidateName = output.extracted_profile?.fullName || data.full_name;
+  const candidateName = data.full_name || output.extracted_profile?.fullName || "Unnamed candidate";
   const job = Array.isArray(data.jobs) ? data.jobs[0] : data.jobs;
 
   return (

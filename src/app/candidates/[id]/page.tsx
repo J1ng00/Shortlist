@@ -197,8 +197,8 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
   const candidate: Candidate = {
     id: data.id,
     jobId: data.job_id,
-    name: profile.fullName || data.full_name,
-    currentRole: profile.currentRole || data.current_position || "Role not extracted yet",
+    name: data.full_name || profile.fullName || "Unnamed candidate",
+    currentRole: data.current_position || profile.currentRole || "Role not provided",
     experienceYears: profile.experienceYears ?? 0,
     location: profile.location || data.jobs.location || "Location not provided",
     githubUrl: data.github_url ?? submittedApplication.github_url ?? undefined,

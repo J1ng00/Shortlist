@@ -51,7 +51,7 @@ export function CandidateUploadForm({ jobId, jobTitle, businessName }: Props) {
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? "Failed to upload candidate details.");
+        throw new Error(data?.error ?? `Failed to upload candidate details. Status ${response.status}.`);
       }
 
       router.push(`/apply/${jobId}/thank-you`);

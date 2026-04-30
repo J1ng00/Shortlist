@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { after, NextResponse } from "next/server";
 
 import { analyzeCandidateById } from "@/lib/candidate-analysis";
+import { extractPdfText } from "@/lib/pdf/extract-text";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function optionalText(formData: FormData, key: string) {
@@ -53,17 +54,11 @@ export async function POST(request: Request) {
     const notes = optionalText(formData, "manual_profile_notes");
     const githubUrl = optionalUrl(formData, "github_url");
     const linkedinUrl = optionalUrl(formData, "linkedin_url");
-    const safeFileName = resume.name.replace(/[^a-zA-Z0-9._-]+/g, "-").toLowerCase();
-    const storagePath = `${jobId}/${candidateId}/${safeFileName}`;
-    const { error: uploadError } = await supabase.storage
-      .from("candidate-resumes")
-      .upload(storagePath, resume, {
-        contentType: resume.type || "application/pdf",
-        upsert: false,
-      });
+    const resumeBuffer = Buffer.from(await resume.arrayBuffer());
+    const resumeText = await extractPdfText(resumeBuffer);
 
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    if (!resumeText) {
+      return NextResponse.json({ error: "Could not extract text from the uploaded resume PDF." }, { status: 400 });
     }
 
     const { error: insertError } = await supabase.from("candidates").insert({
@@ -74,9 +69,7 @@ export async function POST(request: Request) {
       phone: optionalText(formData, "phone"),
       current_position: optionalText(formData, "current_position"),
       github_url: githubUrl,
-      linkedin_url: linkedinUrl,
-      manual_profile_notes: notes,
-      resume_file_path: storagePath,
+      resume_text: resumeText,
       ai_candidate_output: {
         status: "processing",
         submitted_application: {
@@ -89,6 +82,8 @@ export async function POST(request: Request) {
     });
 
     if (insertError) {
+      console.error("Candidate application insert failed", insertError);
+
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
@@ -116,6 +111,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ candidateId, processing: true }, { status: 202 });
   } catch (error) {
+    console.error("Candidate application failed", error);
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Candidate application failed." },
       { status: 500 }
