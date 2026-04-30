@@ -1,9 +1,10 @@
-import { AlertTriangle, ArrowLeft, CheckCircle2, Github, Linkedin, MessageSquareText, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Github, Linkedin, Mail, MessageSquareText, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
 import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
+import { ScheduleInterviewModal } from "@/components/candidates/schedule-interview-modal";
 import { getCandidate, getJob } from "@/lib/mock-data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { Candidate, Job } from "@/lib/types";
@@ -47,6 +48,7 @@ type CandidateAiOutput = {
     outcome?: string;
     label?: string;
     note?: string | null;
+    email_preview_url?: string | null;
   };
   submitted_application?: {
     github_url?: string | null;
@@ -68,7 +70,7 @@ function questionText(question: string | { question?: string; reason?: string })
   return question.reason ? `${question.question ?? "Screening question"} - ${question.reason}` : question.question ?? "Screening question";
 }
 
-async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiOutput: CandidateAiOutput; aiStatus?: string; skillMatch?: CandidateAiOutput["skill_match"]; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
+async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiOutput: CandidateAiOutput; aiStatus?: string; skillMatch?: CandidateAiOutput["skill_match"]; email?: string | null; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
   const { data } = await supabaseAdmin
     .from("candidates")
     .select("*, jobs(*)")
@@ -131,6 +133,7 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
     aiOutput: output,
     aiStatus: output.status,
     skillMatch: output.skill_match,
+    email: data.email,
     linkedinUrl: data.linkedin_url ?? submittedApplication.linkedin_url,
     source: "supabase",
   };
@@ -138,7 +141,7 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
 
 export default async function CandidatePage({ params }: CandidatePageProps) {
   const { id } = await params;
-  const { candidate, job, aiOutput, aiStatus, skillMatch, linkedinUrl, source } = await getCandidateView(id);
+  const { candidate, job, aiOutput, aiStatus, skillMatch, email, linkedinUrl, source } = await getCandidateView(id);
 
   const matchSignals = [
     { label: "Matched skills", value: skillMatch?.matched?.length ?? candidate.extractedSkills.length },
@@ -256,6 +259,16 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                     <p className="text-xs font-black uppercase text-navy/55">HR decision</p>
                     <p className="mt-2 text-lg font-black text-ink">{aiOutput.hr_decision.label}</p>
                     {aiOutput.hr_decision.note ? <p className="mt-2 text-sm leading-6 text-navy/65">{aiOutput.hr_decision.note}</p> : null}
+                    {aiOutput.hr_decision.email_preview_url ? (
+                      <a
+                        className="mt-3 inline-flex rounded-full bg-ink px-3 py-2 text-xs font-black text-paper transition hover:bg-moss"
+                        href={aiOutput.hr_decision.email_preview_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Open email preview
+                      </a>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -348,11 +361,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                   <input name="outcome" type="hidden" value="review" />
                   <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep in review</ActionSubmitButton>
                 </form>
-                <form action={updateCandidateDecision}>
-                  <input name="candidate_id" type="hidden" value={candidate.id} />
-                  <input name="outcome" type="hidden" value="next_stage" />
-                  <ActionSubmitButton pendingLabel="Updating...">Move to next stage</ActionSubmitButton>
-                </form>
+                <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} />
                 <form action={updateCandidateDecision}>
                   <input name="candidate_id" type="hidden" value={candidate.id} />
                   <input name="outcome" type="hidden" value="rejected" />
@@ -420,8 +429,20 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
             <Card>
               <h2 className="text-xl font-black text-navy">Candidate links</h2>
               <div className="mt-4">
-                {candidate.githubUrl || linkedinUrl ? (
+                {email || candidate.githubUrl || linkedinUrl ? (
                   <div className="space-y-3">
+                    {email ? (
+                      <a
+                        className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
+                        href={`mailto:${email}`}
+                      >
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          <Mail className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{email}</span>
+                        </span>
+                        <span>Email</span>
+                      </a>
+                    ) : null}
                     {candidate.githubUrl ? (
                       <a
                         className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
@@ -471,11 +492,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 <input name="outcome" type="hidden" value="rejected" />
                 <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
               </form>
-              <form action={updateCandidateDecision}>
-                <input name="candidate_id" type="hidden" value={candidate.id} />
-                <input name="outcome" type="hidden" value="next_stage" />
-                <ActionSubmitButton pendingLabel="Updating...">Move to next stage</ActionSubmitButton>
-              </form>
+              <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} />
             </div>
           </div>
         </div>
