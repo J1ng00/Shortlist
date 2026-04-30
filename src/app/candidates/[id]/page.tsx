@@ -392,7 +392,15 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                         <input name="outcome" type="hidden" value="review" />
                         <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep reviewing</ActionSubmitButton>
                       </form>
-                      <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} label="Schedule" />
+                      {status === "interview" ? (
+                        <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} label="Schedule" />
+                      ) : (
+                        <form action={updateCandidateDecision}>
+                          <input name="candidate_id" type="hidden" value={candidate.id} />
+                          <input name="outcome" type="hidden" value="next_stage" />
+                          <ActionSubmitButton pendingLabel="Updating...">Next stage</ActionSubmitButton>
+                        </form>
+                      )}
                       {canAnalyze ? (
                         <form action={analyzeCandidate}>
                           <input name="candidate_id" type="hidden" value={candidate.id} />
@@ -431,12 +439,16 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs font-black uppercase text-navy/55">Status action</p>
-                    <p className="mt-1 text-sm font-bold text-navy/65">Return this candidate to review if the decision changes.</p>
+                    <p className="mt-1 text-sm font-bold text-navy/65">
+                      {isRejected ? "Undo the rejection and return this candidate to review." : "Return this candidate to review if the decision changes."}
+                    </p>
                   </div>
                   <form action={updateCandidateDecision}>
                     <input name="candidate_id" type="hidden" value={candidate.id} />
                     <input name="outcome" type="hidden" value="review" />
-                    <ActionSubmitButton pendingLabel="Reopening..." variant="secondary">Reopen review</ActionSubmitButton>
+                    <ActionSubmitButton pendingLabel="Reopening..." variant="secondary">
+                      {isRejected ? "Undo reject" : "Reopen review"}
+                    </ActionSubmitButton>
                   </form>
                 </div>
               </div>

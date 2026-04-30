@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 
 import { analyzeCandidateById } from "@/lib/candidate-analysis";
 import { sendInterviewInvitation } from "@/lib/email/interview-invitation";
-import { sendJobOfferEmail } from "@/lib/email/job-offer";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CandidateOutput = {
@@ -86,12 +85,12 @@ export async function updateCandidateDecision(formData: FormData) {
     throw new Error("Candidate id is required.");
   }
 
-  const decisionMap: Record<string, { stage: "review" | "interview" | "reject" | "hired"; label: string }> = {
-    review: { stage: "review", label: "Review" },
-    next_stage: { stage: "interview", label: "Interview" },
-    reject: { stage: "reject", label: "Rejected" },
-    rejected: { stage: "reject", label: "Rejected" },
-    hired: { stage: "hired", label: "Hired" },
+  const decisionMap: Record<string, { stage: "review" | "interview" | "reject" | "hired"; label: string; storedOutcome: string }> = {
+    review: { stage: "review", label: "Review", storedOutcome: "review" },
+    next_stage: { stage: "interview", label: "Interview", storedOutcome: "next_stage" },
+    reject: { stage: "reject", label: "Rejected", storedOutcome: "rejected" },
+    rejected: { stage: "reject", label: "Rejected", storedOutcome: "rejected" },
+    hired: { stage: "hired", label: "Hired", storedOutcome: "hired" },
   };
   const decision = decisionMap[outcome];
 
@@ -114,9 +113,9 @@ export async function updateCandidateDecision(formData: FormData) {
   const job = Array.isArray(data.jobs) ? data.jobs[0] : data.jobs;
   let emailPreviewUrl: string | null = null;
 
-  if (outcome === "next_stage") {
+  if (outcome === "next_stage" && (interviewDate || interviewTime)) {
     if (!interviewDate || !interviewTime) {
-      throw new Error("Choose an interview date and time before moving to next stage.");
+      throw new Error("Choose both an interview date and time before scheduling.");
     }
 
     if (!data.email) {
@@ -138,45 +137,52 @@ export async function updateCandidateDecision(formData: FormData) {
     emailPreviewUrl = emailResult.previewUrl;
   }
 
-  if (outcome === "hired") {
-    if (!data.email) {
-      throw new Error("Candidate does not have an email address for the job offer.");
-    }
-
-    if (!job) {
-      throw new Error("Candidate job context is missing.");
-    }
-
-    const emailResult = await sendJobOfferEmail({
-      candidateEmail: data.email,
-      candidateName: data.full_name,
-      appliedPosition: job.role_title,
-      companyName: job.business_name,
-    });
-    emailPreviewUrl = emailResult.previewUrl;
-  }
-
+  const hrDecision = {
+    outcome: decision.storedOutcome,
+    label: decision.label,
+    note,
+    email_preview_url: emailPreviewUrl,
+    interview_date: interviewDate || null,
+    interview_time: interviewTime || null,
+    decided_at: new Date().toISOString(),
+  };
+  const updatedAt = new Date().toISOString();
+  const updatePayload = {
+    stage: decision.stage,
+    ai_candidate_output: {
+      ...output,
+      hr_decision: hrDecision,
+    },
+    updated_at: updatedAt,
+  };
   const { error: updateError } = await supabase
     .from("candidates")
-    .update({
-      stage: decision.stage,
-      ai_candidate_output: {
-        ...output,
-        hr_decision: {
-          outcome,
-          label: decision.label,
-          note,
-          email_preview_url: emailPreviewUrl,
-          interview_date: interviewDate || null,
-          interview_time: interviewTime || null,
-          decided_at: new Date().toISOString(),
-        },
-      },
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", candidateId);
 
   if (updateError) {
+    const isStageConstraintError =
+      updateError.code === "23514" && updateError.message.includes("candidates_stage_check");
+
+    if ((decision.stage === "reject" || decision.stage === "hired") && isStageConstraintError) {
+      const { error: fallbackError } = await supabase
+        .from("candidates")
+        .update({
+          stage: "review",
+          ai_candidate_output: updatePayload.ai_candidate_output,
+          updated_at: updatedAt,
+        })
+        .eq("id", candidateId);
+
+      if (!fallbackError) {
+        revalidatePath("/candidates");
+        revalidatePath(`/candidates/${candidateId}`);
+        return;
+      }
+
+      throw new Error(fallbackError.message);
+    }
+
     throw new Error(updateError.message);
   }
 

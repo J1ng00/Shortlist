@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, BriefcaseBusiness, CalendarClock, Github, Linkedin, Search, Sparkles, UserRound } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
-import { ButtonLink, Card, Pill } from "@/components/ui";
+import { ButtonLink, Card } from "@/components/ui";
 import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
 import { ScheduleInterviewModal } from "@/components/candidates/schedule-interview-modal";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -111,28 +111,6 @@ function candidateStatus(row: CandidateRow) {
   return row.ai_candidate_output?.status ?? "submitted";
 }
 
-function recommendationLabel(row: CandidateRow) {
-  const recommendation = row.ai_candidate_output?.recommendation;
-
-  if (recommendation === "hire") {
-    return "Hire";
-  }
-
-  if (recommendation === "progress") {
-    return "Progress";
-  }
-
-  if (recommendation === "reject") {
-    return "Do not progress";
-  }
-
-  if (recommendation === "hold") {
-    return "Hold";
-  }
-
-  return "Awaiting AI";
-}
-
 function scheduledInterviewLabel(row: CandidateRow) {
   const date = row.ai_candidate_output?.hr_decision?.interview_date;
   const time = row.ai_candidate_output?.hr_decision?.interview_time;
@@ -225,18 +203,6 @@ function matchesSearch(row: CandidateRow, query: string) {
   return haystack.includes(query.toLowerCase());
 }
 
-function stageTone(status: string): "good" | "warn" | "neutral" {
-  if (status === "ready") {
-    return "good";
-  }
-
-  if (status === "failed") {
-    return "warn";
-  }
-
-  return "neutral";
-}
-
 function displayStatus(row: CandidateRow) {
   const outcome = row.ai_candidate_output?.hr_decision?.outcome;
 
@@ -249,22 +215,6 @@ function displayStatus(row: CandidateRow) {
   }
 
   return row.stage;
-}
-
-function statusClassName(status: string) {
-  if (status === "hired") {
-    return "border-emerald-300 bg-emerald-50 text-emerald-800";
-  }
-
-  if (status === "reject") {
-    return "border-red-300 bg-red-50 text-red-700";
-  }
-
-  if (status === "interview") {
-    return "border-ink/20 bg-moss/35 text-ink";
-  }
-
-  return "border-ink/20 bg-white text-ink";
 }
 
 export const dynamic = "force-dynamic";
@@ -283,7 +233,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
 
   const rows = (data ?? []) as unknown as CandidateRow[];
   const filtered = rows.filter((row) => {
-    const stageMatch = stage === "all" || row.stage === stage;
+    const stageMatch = stage === "all" || displayStatus(row) === stage;
     return stageMatch && matchesSearch(row, q);
   });
   const readyCount = rows.filter((row) => candidateStatus(row) === "ready").length;
@@ -355,6 +305,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
             const statusLabel = displayStatus(row);
             const isRejected = statusLabel === "reject";
             const isHired = statusLabel === "hired";
+            const isInterview = statusLabel === "interview";
             const links = {
               github: row.github_url ?? row.ai_candidate_output?.submitted_application?.github_url,
               linkedin: row.ai_candidate_output?.submitted_application?.linkedin_url,
@@ -362,18 +313,9 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
 
             return (
               <Card key={row.id} className="rounded-2xl">
-                <div className="grid gap-5 xl:grid-cols-[1fr_220px] xl:items-center">
+                <div className="grid gap-5 xl:grid-cols-[1fr_220px] xl:items-start">
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Pill tone={stageTone(status)}>{status === "ready" ? "AI analyzed" : status}</Pill>
-                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClassName(statusLabel)}`}>
-                        {statusLabel}
-                      </span>
-                      <Pill>{recommendationLabel(row)}</Pill>
-                      {job ? <Pill>{job.role_title}</Pill> : null}
-                    </div>
-
-                    <div className="mt-4 flex gap-4">
+                    <div className="flex gap-4">
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-moss/20 text-ink">
                         <UserRound className="h-6 w-6" />
                       </div>
@@ -451,15 +393,29 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                       ) : null}
                     </div>
                     <div className="mt-4 grid gap-2">
-                      {!isRejected && !isHired ? (
+                      {isRejected ? (
+                        <form action={updateCandidateDecision}>
+                          <input name="candidate_id" type="hidden" value={row.id} />
+                          <input name="outcome" type="hidden" value="review" />
+                          <ActionSubmitButton fullWidth pendingLabel="Undoing..." variant="secondary">Undo reject</ActionSubmitButton>
+                        </form>
+                      ) : !isHired ? (
                         <>
-                          <ScheduleInterviewModal
-                            action={updateCandidateDecision}
-                            candidateId={row.id}
-                            fullWidth
-                            label={interviewSummary ? "Schedule another interview" : "Next stage"}
-                            variant="secondary"
-                          />
+                          {isInterview ? (
+                            <ScheduleInterviewModal
+                              action={updateCandidateDecision}
+                              candidateId={row.id}
+                              fullWidth
+                              label="Schedule"
+                              variant="secondary"
+                            />
+                          ) : (
+                            <form action={updateCandidateDecision}>
+                              <input name="candidate_id" type="hidden" value={row.id} />
+                              <input name="outcome" type="hidden" value="next_stage" />
+                              <ActionSubmitButton fullWidth pendingLabel="Updating..." variant="secondary">Next stage</ActionSubmitButton>
+                            </form>
+                          )}
                           <form action={updateCandidateDecision}>
                             <input name="candidate_id" type="hidden" value={row.id} />
                             <input name="outcome" type="hidden" value="hired" />
