@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, MapPin, Pencil, Plus, Sparkles } from "lucide-react";
+import { CalendarDays, ClipboardList, MapPin, Pencil, Plus, Search, Sparkles, UserPlus } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card, Pill } from "@/components/ui";
@@ -25,9 +25,42 @@ type SavedJob = {
   created_at: string;
 };
 
+type JobsPageProps = {
+  searchParams: Promise<{
+    q?: string;
+    workType?: string;
+  }>;
+};
+
+function matchesSearch(job: SavedJob, query: string) {
+  if (!query) {
+    return true;
+  }
+
+  const rubricText = job.ai_job_output?.evaluation_rubric
+    ?.map((item) => `${item.category ?? ""} ${item.evidence_to_look_for ?? ""}`)
+    .join(" ");
+  const haystack = [
+    job.role_title,
+    job.business_name,
+    job.location,
+    job.work_type,
+    job.ai_job_output?.job_description,
+    rubricText,
+    ...(job.must_have_skills ?? []),
+    ...(job.ai_job_output?.interview_categories ?? []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(query.toLowerCase());
+}
+
 export const dynamic = "force-dynamic";
 
-export default async function JobsPage() {
+export default async function JobsPage({ searchParams }: JobsPageProps) {
+  const { q = "", workType = "all" } = await searchParams;
   const supabase = createServerSupabaseClient();
   const { data: jobs, error } = await supabase
     .from("jobs")
@@ -39,6 +72,11 @@ export default async function JobsPage() {
   }
 
   const savedJobs = (jobs ?? []) as SavedJob[];
+  const workTypes = Array.from(new Set(savedJobs.map((job) => job.work_type).filter((value): value is string => Boolean(value)))).sort();
+  const filteredJobs = savedJobs.filter((job) => {
+    const workTypeMatch = workType === "all" || job.work_type === workType;
+    return workTypeMatch && matchesSearch(job, q);
+  });
 
   return (
     <PageShell
@@ -46,26 +84,42 @@ export default async function JobsPage() {
       title="Saved job profiles"
       description="Review the roles you have created, including the manager inputs and the generated AI hiring kit saved with each job."
       actions={
-        <>
-          <ButtonLink href="/jobs/new">
-            <Plus className="h-4 w-4" />
-            New job
-          </ButtonLink>
-          <ButtonLink href="/candidates/new" variant="secondary">
-            Add candidate
-          </ButtonLink>
-          <ButtonLink href="/interview/cand-maya" variant="secondary">
-            Interview
-          </ButtonLink>
-          <ButtonLink href="/recommendation/cand-maya" variant="secondary">
-            Memo
-          </ButtonLink>
-        </>
+        <ButtonLink href="/jobs/new">
+          <Plus className="h-4 w-4" />
+          New job
+        </ButtonLink>
       }
     >
-      {savedJobs.length ? (
+      <Card className="mb-6 rounded-2xl">
+        <form className="grid gap-3 md:grid-cols-[1fr_220px_auto]" action="/jobs">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-navy/45" />
+            <input
+              className="h-12 w-full rounded-xl border border-line bg-white pl-11 pr-4 text-sm font-bold outline-none focus:border-ink"
+              defaultValue={q}
+              name="q"
+              placeholder="Search role, company, skill, location..."
+            />
+          </label>
+          <select
+            className="h-12 rounded-xl border border-line bg-white px-4 text-sm font-bold outline-none focus:border-ink"
+            defaultValue={workType}
+            name="workType"
+          >
+            <option value="all">All work types</option>
+            {workTypes.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+          <button className="h-12 rounded-xl bg-ink px-5 text-sm font-black text-paper" type="submit">
+            Search
+          </button>
+        </form>
+      </Card>
+
+      {filteredJobs.length ? (
         <div className="grid gap-5">
-          {savedJobs.map((job) => {
+          {filteredJobs.map((job) => {
             const summary = job.ai_job_output?.job_description;
             const rubric = job.ai_job_output?.evaluation_rubric ?? [];
             const categories = job.ai_job_output?.interview_categories ?? [];
@@ -98,24 +152,28 @@ export default async function JobsPage() {
                     </div>
                     {summary ? <p className="mt-5 text-sm leading-6 text-ink/70">{summary}</p> : null}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                     <Link
                       href={`/apply/${job.id}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-ink px-4 text-sm font-bold text-paper transition hover:bg-moss"
                     >
-                      <Plus className="h-4 w-4" />
+                      <ClipboardList className="h-4 w-4" />
                       Application form
                     </Link>
                     <Link
                       href={`/candidates/new?jobId=${job.id}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
+                      aria-label={`Add candidate internally for ${job.role_title}`}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 text-sm font-bold text-ink transition hover:border-ink/40"
+                      title="Add internally"
                     >
-                      <Plus className="h-4 w-4" />
+                      <UserPlus className="h-4 w-4" />
                       Add internally
                     </Link>
                     <Link
                       href={`/jobs/${job.id}/edit`}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40"
+                      aria-label={`Edit ${job.role_title}`}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 text-sm font-bold text-ink transition hover:border-ink/40"
+                      title="Edit"
                     >
                       <Pencil className="h-4 w-4" />
                       Edit
@@ -157,13 +215,14 @@ export default async function JobsPage() {
         <Card>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-2xl font-black">No saved jobs yet</h2>
+              <h2 className="text-2xl font-black">{savedJobs.length ? "No jobs found" : "No saved jobs yet"}</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/60">
-                Create a job profile, generate the AI kit, and save it. It will appear here with the generated summary,
-                rubric, and interview categories.
+                {savedJobs.length
+                  ? "Adjust the search or work type filter to find a saved role."
+                  : "Create a job profile, generate the AI kit, and save it. It will appear here with the generated summary, rubric, and interview categories."}
               </p>
             </div>
-            <ButtonLink href="/jobs/new">Create first job</ButtonLink>
+            {savedJobs.length ? null : <ButtonLink href="/jobs/new">Create first job</ButtonLink>}
           </div>
         </Card>
       )}

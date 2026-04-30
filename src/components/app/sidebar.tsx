@@ -12,19 +12,14 @@ type AppSidebarProps = {
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   return (
     <aside className="hidden border-r border-line bg-white/80 lg:flex lg:flex-col">
-      <div className={`flex h-16 items-center border-b border-line ${collapsed ? "justify-center px-2" : "gap-3 px-4"}`}>
+      <div className={`flex items-center border-b border-line ${collapsed ? "h-24 flex-col justify-center gap-2 px-2" : "h-16 gap-3 px-4"}`}>
         <div className={collapsed ? "sr-only" : "min-w-0 flex-1"}>
           <Brand />
         </div>
         {collapsed ? <Brand compact /> : null}
-      </div>
-
-      <div className={`border-b border-line py-3 ${collapsed ? "px-2" : "px-3"}`}>
         <button
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`flex h-9 w-9 items-center justify-center rounded-xl border border-ink/10 bg-paper text-navy/70 transition hover:border-ink/25 hover:bg-moss/20 hover:text-ink ${
-            collapsed ? "mx-auto" : "ml-auto"
-          }`}
+          className={`${collapsed ? "h-8 w-8 rounded-lg" : "h-9 w-9 rounded-xl"} flex shrink-0 items-center justify-center border border-ink/10 bg-paper text-navy/70 transition hover:border-ink/25 hover:bg-moss/20 hover:text-ink`}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           type="button"
           onClick={onToggle}

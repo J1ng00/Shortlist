@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, CheckCircle2, Github, Linkedin, Mail, MessageSquareText, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Github, Linkedin, Mail, MessageSquareText, Mic2, ShieldCheck, Sparkles, UserRound, Video } from "lucide-react";
 import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
@@ -8,7 +8,7 @@ import { ScheduleInterviewModal } from "@/components/candidates/schedule-intervi
 import { getCandidate, getJob } from "@/lib/mock-data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { Candidate, Job } from "@/lib/types";
-import { analyzeCandidate, createInterviewSession, updateCandidateDecision } from "./actions";
+import { analyzeCandidate, updateCandidateDecision } from "./actions";
 
 type CandidatePageProps = {
   params: Promise<{
@@ -49,6 +49,16 @@ type CandidateAiOutput = {
     label?: string;
     note?: string | null;
     email_preview_url?: string | null;
+    interview_date?: string | null;
+    interview_time?: string | null;
+  };
+  interview_summary?: {
+    headline?: string;
+    summary?: string;
+    strengths?: string[];
+    concerns?: string[];
+    nextStep?: string;
+    finalizedAt?: string;
   };
   submitted_application?: {
     github_url?: string | null;
@@ -68,6 +78,96 @@ function questionText(question: string | { question?: string; reason?: string })
   }
 
   return question.reason ? `${question.question ?? "Screening question"} - ${question.reason}` : question.question ?? "Screening question";
+}
+
+function scheduledInterviewLabel(aiOutput: CandidateAiOutput) {
+  const date = aiOutput.hr_decision?.interview_date;
+  const time = aiOutput.hr_decision?.interview_time;
+
+  if (!date || !time) {
+    return null;
+  }
+
+  const scheduledAt = new Date(`${date}T${time}`);
+
+  if (Number.isNaN(scheduledAt.getTime())) {
+    return `${date} at ${time}`;
+  }
+
+  return `${scheduledAt.toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })} at ${scheduledAt.toLocaleTimeString("en-AU", {
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
+}
+
+function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput, aiStatus?: string) {
+  const scheduledInterview = scheduledInterviewLabel(aiOutput);
+  const decision = aiOutput.hr_decision;
+
+  if (decision?.outcome === "rejected") {
+    return {
+      label: "Decision made",
+      title: "Candidate has been rejected.",
+      body: decision.note ?? "This profile is stored as a decision-stage record. No further interview action is needed.",
+      action: "No next action required unless you want to revisit the decision.",
+    };
+  }
+
+  if (decision?.outcome === "hired") {
+    return {
+      label: "Decision made",
+      title: "Candidate is marked for hire.",
+      body: decision.note ?? "This profile has reached the final decision stage.",
+      action: "Prepare offer or onboarding follow-up outside the screening flow.",
+    };
+  }
+
+  if (aiOutput.interview_summary) {
+    return {
+      label: "Interview completed",
+      title: aiOutput.interview_summary.headline ?? "Interview completed.",
+      body: aiOutput.interview_summary.summary ?? "The interview summary has been saved for this candidate.",
+      action: aiOutput.interview_summary.nextStep ?? "Review interview evidence and choose whether to schedule another interview, reject, or progress to a final decision.",
+    };
+  }
+
+  if (candidate.stage === "interview" || decision?.outcome === "next_stage") {
+    return {
+      label: scheduledInterview ? "Interview scheduled" : "Interview stage",
+      title: scheduledInterview ? `Interview scheduled for ${scheduledInterview}.` : "Candidate is ready for interview.",
+      body: decision?.note ?? "The candidate has been moved out of review and into the interview process.",
+      action: scheduledInterview ? "Run the interview, then record the interview summary before making a final decision." : "Schedule an interview or start the interview copilot.",
+    };
+  }
+
+  if (aiStatus !== "ready") {
+    return {
+      label: "Awaiting analysis",
+      title: "Run AI analysis before deciding.",
+      body: "The candidate has been submitted, but the role-specific analysis is not ready yet.",
+      action: "Analyze fit, then review the evidence before moving the candidate forward.",
+    };
+  }
+
+  if (aiOutput.recommendation === "reject" || candidate.fitScore < 60) {
+    return {
+      label: "Review stage",
+      title: "Recommendation: do not progress yet.",
+      body: aiOutput.recommendation_reason ?? candidate.aiSummary,
+      action: "Validate the gaps, then reject or keep in review if more evidence is needed.",
+    };
+  }
+
+  return {
+    label: "Review stage",
+    title: aiOutput.recommendation_headline ?? `Recommendation: ${candidate.fitScore >= 80 ? "strong fit" : "potential fit"}.`,
+    body: aiOutput.recommendation_reason ?? candidate.aiSummary,
+    action: aiOutput.next_best_action ?? "Move to interview once the reviewer is comfortable with the evidence.",
+  };
 }
 
 async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiOutput: CandidateAiOutput; aiStatus?: string; skillMatch?: CandidateAiOutput["skill_match"]; email?: string | null; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
@@ -156,13 +256,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
       ]
     : null;
   const recommendationLabel = candidate.fitScore >= 80 ? "Strong fit" : candidate.fitScore >= 60 ? "Potential fit" : "Needs review";
-  const recommendationHeadline = aiOutput.recommendation_headline ?? (
-    aiOutput.recommendation === "reject"
-      ? "You should not hire this candidate because the evidence does not meet the role requirements yet."
-      : `You should ${candidate.fitScore >= 60 ? "consider" : "not progress"} this candidate because the current fit score is ${candidate.fitScore}/100.`
-  );
-  const recommendationReason = aiOutput.recommendation_reason ?? candidate.aiSummary;
-  const nextBestAction = aiOutput.next_best_action ?? "Review the evidence, then choose whether to move the candidate to the next stage or reject them.";
+  const currentRecommendation = processRecommendation(candidate, aiOutput, aiStatus);
   const canAnalyze = source === "supabase" && aiStatus !== "ready";
   const candidateIsSaved = source === "supabase";
 
@@ -184,20 +278,33 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
             </form>
           ) : null}
           <ButtonLink href={`/candidates/${candidate.id}/ask-ai`} variant="secondary">Ask AI</ButtonLink>
-          <ButtonLink href={`/interview/${candidate.id}`}>Start interview copilot</ButtonLink>
-          {candidateIsSaved ? (
-            <>
-              <form action={createInterviewSession}>
-                <input name="candidate_id" type="hidden" value={candidate.id} />
-                <ActionSubmitButton pendingLabel="Scheduling..." variant="secondary">
-                  Schedule interview
-                </ActionSubmitButton>
-              </form>
-              <ButtonLink href={`/interview/${candidate.id}/live`} variant="secondary">
-                Join live interview
-              </ButtonLink>
-            </>
-          ) : null}
+          <details className="group relative">
+            <summary className="inline-flex cursor-pointer list-none items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss [&::-webkit-details-marker]:hidden">
+              Interview
+              <ChevronDown className="h-4 w-4 transition group-open:rotate-180" />
+            </summary>
+            <div className="absolute right-0 z-20 mt-2 w-64 rounded-xl border border-line bg-paper p-2 shadow-panel">
+              <Link
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-ink transition hover:bg-moss/15"
+                href={`/interview/${candidate.id}`}
+              >
+                <Mic2 className="h-4 w-4" />
+                Start interview copilot
+              </Link>
+              {candidateIsSaved ? (
+                <>
+                  <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} label="Schedule interview" variant="menu" />
+                  <Link
+                    className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-ink transition hover:bg-moss/15"
+                    href={`/interview/${candidate.id}/live`}
+                  >
+                    <Video className="h-4 w-4" />
+                    Join live interview
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          </details>
         </>
       }
     >
@@ -210,10 +317,6 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
               </div>
               <div className="min-w-0">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <Link href="/" className="inline-flex items-center gap-2 text-sm font-black text-navy/60 hover:text-ink">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to dashboard
-                  </Link>
                   <Pill tone="good">{aiOutput.hr_decision?.label ?? candidate.stage}</Pill>
                   <Pill>{aiStatus === "ready" || source === "mock" ? "AI analyzed" : aiStatus ?? "Awaiting AI"}</Pill>
                 </div>
@@ -226,42 +329,51 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                     <Pill key={skill}>{skill}</Pill>
                   ))}
                 </div>
+                {candidateIsSaved ? (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <form action={updateCandidateDecision}>
+                      <input name="candidate_id" type="hidden" value={candidate.id} />
+                      <input name="outcome" type="hidden" value="review" />
+                      <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep in review</ActionSubmitButton>
+                    </form>
+                    <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} />
+                    <form action={updateCandidateDecision}>
+                      <input name="candidate_id" type="hidden" value={candidate.id} />
+                      <input name="outcome" type="hidden" value="hired" />
+                      <ActionSubmitButton pendingLabel="Updating...">Hire now</ActionSubmitButton>
+                    </form>
+                    <form action={updateCandidateDecision}>
+                      <input name="candidate_id" type="hidden" value={candidate.id} />
+                      <input name="outcome" type="hidden" value="rejected" />
+                      <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject candidate</ActionSubmitButton>
+                    </form>
+                  </div>
+                ) : null}
               </div>
             </div>
 
-            <div className="rounded-xl border border-ink/20 bg-moss/25 p-5">
-              <p className="text-xs font-black uppercase text-ink">AI recommendation</p>
-              <div className="mt-3 flex items-end justify-between gap-4">
-                <p className="text-2xl font-black text-ink">{recommendationLabel}</p>
-                <p className="text-lg font-black text-navy">{candidate.fitScore}/100</p>
-              </div>
-              <div className="mt-4 h-2 rounded-full bg-white">
-                <div className="h-2 rounded-full bg-ink" style={{ width: `${candidate.fitScore}%` }} />
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6">
-            <Card className="border-ink/20 bg-white">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-sm font-black text-ink">Hiring recommendation</p>
-                  <h2 className="mt-2 text-2xl font-black text-navy">{recommendationHeadline}</h2>
-                  <p className="mt-4 max-w-4xl text-sm leading-7 text-navy/75">{recommendationReason}</p>
-                  <p className="mt-4 rounded-xl bg-moss/15 px-4 py-3 text-sm font-bold leading-6 text-navy">
-                    Next action: {nextBestAction}
-                  </p>
+            <div className="space-y-3">
+              <div className="rounded-xl border border-ink/20 bg-moss/25 p-5">
+                <p className="text-xs font-black uppercase text-ink">AI recommendation</p>
+                <div className="mt-3 flex items-end justify-between gap-4">
+                  <p className="text-2xl font-black text-ink">{recommendationLabel}</p>
+                  <p className="text-lg font-black text-navy">{candidate.fitScore}/100</p>
                 </div>
-                {aiOutput.hr_decision ? (
-                  <div className="rounded-xl border border-line bg-paper p-4">
-                    <p className="text-xs font-black uppercase text-navy/55">HR decision</p>
-                    <p className="mt-2 text-lg font-black text-ink">{aiOutput.hr_decision.label}</p>
-                    {aiOutput.hr_decision.note ? <p className="mt-2 text-sm leading-6 text-navy/65">{aiOutput.hr_decision.note}</p> : null}
+                <div className="mt-4 h-2 rounded-full bg-white">
+                  <div className="h-2 rounded-full bg-ink" style={{ width: `${candidate.fitScore}%` }} />
+                </div>
+              </div>
+              {aiOutput.hr_decision ? (
+                <div className="rounded-xl border border-line bg-paper p-4">
+                  <p className="text-xs font-black uppercase text-navy/55">HR decision</p>
+                  <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-black text-ink">{aiOutput.hr_decision.label}</p>
+                      {aiOutput.hr_decision.note ? <p className="mt-2 text-sm leading-6 text-navy/65">{aiOutput.hr_decision.note}</p> : null}
+                    </div>
                     {aiOutput.hr_decision.email_preview_url ? (
                       <a
-                        className="mt-3 inline-flex rounded-full bg-ink px-3 py-2 text-xs font-black text-paper transition hover:bg-moss"
+                        className="inline-flex shrink-0 rounded-full bg-ink px-3 py-2 text-xs font-black text-paper transition hover:bg-moss"
                         href={aiOutput.hr_decision.email_preview_url}
                         rel="noreferrer"
                         target="_blank"
@@ -270,8 +382,21 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                       </a>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-6">
+            <Card className="border-ink/20 bg-white">
+              <p className="text-sm font-black text-ink">{currentRecommendation.label}</p>
+              <h2 className="mt-2 text-2xl font-black text-navy">{currentRecommendation.title}</h2>
+              <p className="mt-4 max-w-4xl text-sm leading-7 text-navy/75">{currentRecommendation.body}</p>
+              <p className="mt-4 rounded-xl bg-moss/15 px-4 py-3 text-sm font-bold leading-6 text-navy">
+                Recommended action: {currentRecommendation.action}
+              </p>
             </Card>
 
             <Card>
@@ -350,25 +475,45 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
           </div>
 
           <div className="space-y-6">
-            <Card>
-              <h2 className="text-xl font-black text-navy">HR stage controls</h2>
-              <p className="mt-2 text-sm leading-6 text-navy/65">
-                Choose the operational outcome for this candidate. Rejected and hired candidates are stored as decision-stage records.
-              </p>
-              <div className="mt-4 grid gap-3">
-                <form action={updateCandidateDecision}>
-                  <input name="candidate_id" type="hidden" value={candidate.id} />
-                  <input name="outcome" type="hidden" value="review" />
-                  <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep in review</ActionSubmitButton>
-                </form>
-                <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} />
-                <form action={updateCandidateDecision}>
-                  <input name="candidate_id" type="hidden" value={candidate.id} />
-                  <input name="outcome" type="hidden" value="rejected" />
-                  <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject candidate</ActionSubmitButton>
-                </form>
-              </div>
-            </Card>
+            {aiOutput.interview_summary ? (
+              <Card className="border-moss/25 bg-moss/10">
+                <p className="text-sm font-black text-ink">Interview summary</p>
+                <h2 className="mt-2 text-2xl font-black text-navy">
+                  {aiOutput.interview_summary.headline ?? "Interview completed"}
+                </h2>
+                <p className="mt-4 text-sm leading-7 text-navy/75">
+                  {aiOutput.interview_summary.summary ?? "Interview summary has been saved."}
+                </p>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-black text-ink">Strengths from interview</p>
+                    <ul className="mt-2 space-y-2">
+                      {(aiOutput.interview_summary.strengths?.length
+                        ? aiOutput.interview_summary.strengths
+                        : ["No interview strengths saved yet."]
+                      ).map((item) => (
+                        <li key={item} className="rounded-lg border border-line bg-white p-3 text-sm leading-6 text-navy/75">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-ink">Concerns to validate</p>
+                    <ul className="mt-2 space-y-2">
+                      {(aiOutput.interview_summary.concerns?.length
+                        ? aiOutput.interview_summary.concerns
+                        : ["No interview concerns saved yet."]
+                      ).map((item) => (
+                        <li key={item} className="rounded-lg border border-ink/15 bg-white/75 p-3 text-sm leading-6 text-navy/75">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
 
             <Card>
               <div className="flex items-center gap-3">
@@ -404,98 +549,83 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
               </ul>
             </Card>
 
-            <Card>
-              <h2 className="text-xl font-black text-navy">Why this recommendation</h2>
-              <div className="mt-4 grid gap-4">
-                <div>
-                  <p className="text-sm font-black text-ink">Evidence for</p>
-                  <ul className="mt-2 space-y-2">
-                    {(aiOutput.evidence_for?.length ? aiOutput.evidence_for : candidate.strengths.length ? candidate.strengths : ["No positive evidence returned yet."]).map((item) => (
-                      <li key={item} className="rounded-lg border border-line bg-white p-3 text-sm leading-6 text-navy/75">{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-sm font-black text-ink">Evidence against</p>
-                  <ul className="mt-2 space-y-2">
-                    {(aiOutput.evidence_against?.length ? aiOutput.evidence_against : candidate.missingRequirements.length ? candidate.missingRequirements : ["No counter-evidence returned yet."]).map((item) => (
-                      <li key={item} className="rounded-lg border border-ink/15 bg-clay/30 p-3 text-sm leading-6 text-navy/75">{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <h2 className="text-xl font-black text-navy">Candidate links</h2>
-              <div className="mt-4">
-                {email || candidate.githubUrl || linkedinUrl ? (
-                  <div className="space-y-3">
-                    {email ? (
-                      <a
-                        className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
-                        href={`mailto:${email}`}
-                      >
-                        <span className="inline-flex min-w-0 items-center gap-2">
-                          <Mail className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{email}</span>
-                        </span>
-                        <span>Email</span>
-                      </a>
-                    ) : null}
-                    {candidate.githubUrl ? (
-                      <a
-                        className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
-                        href={candidate.githubUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Github className="h-4 w-4" />
-                          GitHub profile
-                        </span>
-                        <span>Open</span>
-                      </a>
-                    ) : null}
-                    {linkedinUrl ? (
-                      <a
-                        className="inline-flex w-full items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
-                        href={linkedinUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Linkedin className="h-4 w-4" />
-                          LinkedIn profile
-                        </span>
-                        <span>Open</span>
-                      </a>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="text-sm text-navy/60">No public links added.</p>
-                )}
-              </div>
-            </Card>
           </div>
         </div>
 
-        <div className="sticky bottom-4 z-10 rounded-xl border border-line bg-white/95 p-4 shadow-panel backdrop-blur">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Card>
+          <h2 className="text-xl font-black text-navy">Why this recommendation</h2>
+          <div className="mt-4 grid gap-5 lg:grid-cols-2">
             <div>
-              <p className="text-xs font-black uppercase text-ink">Decision required</p>
-              <p className="mt-1 text-sm text-navy/65">Compare the evidence against the role before approving the next stage.</p>
+              <p className="text-sm font-black text-ink">Evidence for</p>
+              <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                {(aiOutput.evidence_for?.length ? aiOutput.evidence_for : candidate.strengths.length ? candidate.strengths : ["No positive evidence returned yet."]).map((item) => (
+                  <li key={item} className="rounded-lg border border-line bg-white p-3 text-sm leading-6 text-navy/75">{item}</li>
+                ))}
+              </ul>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <form action={updateCandidateDecision}>
-                <input name="candidate_id" type="hidden" value={candidate.id} />
-                <input name="outcome" type="hidden" value="rejected" />
-                <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
-              </form>
-              <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} />
+            <div>
+              <p className="text-sm font-black text-ink">Evidence against</p>
+              <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                {(aiOutput.evidence_against?.length ? aiOutput.evidence_against : candidate.missingRequirements.length ? candidate.missingRequirements : ["No counter-evidence returned yet."]).map((item) => (
+                  <li key={item} className="rounded-lg border border-ink/15 bg-clay/30 p-3 text-sm leading-6 text-navy/75">{item}</li>
+                ))}
+              </ul>
             </div>
           </div>
-        </div>
+        </Card>
+
+        <Card>
+          <h2 className="text-xl font-black text-navy">Candidate links</h2>
+          <div className="mt-4">
+            {email || candidate.githubUrl || linkedinUrl ? (
+              <div className="grid gap-3 lg:grid-cols-3">
+                {email ? (
+                  <a
+                    className="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
+                    href={`mailto:${email}`}
+                  >
+                    <span className="inline-flex min-w-0 items-center gap-2">
+                      <Mail className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{email}</span>
+                    </span>
+                    <span>Email</span>
+                  </a>
+                ) : null}
+                {candidate.githubUrl ? (
+                  <a
+                    className="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
+                    href={candidate.githubUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Github className="h-4 w-4" />
+                      GitHub profile
+                    </span>
+                    <span>Open</span>
+                  </a>
+                ) : null}
+                {linkedinUrl ? (
+                  <a
+                    className="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
+                    href={linkedinUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Linkedin className="h-4 w-4" />
+                      LinkedIn profile
+                    </span>
+                    <span>Open</span>
+                  </a>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-navy/60">No public links added.</p>
+            )}
+          </div>
+        </Card>
+
       </div>
     </PageShell>
   );
