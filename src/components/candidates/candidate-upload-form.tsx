@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
 };
 
 export function CandidateUploadForm({ jobId, jobTitle, businessName }: Props) {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [githubUrl, setGithubUrl] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
@@ -19,7 +21,6 @@ export function CandidateUploadForm({ jobId, jobTitle, businessName }: Props) {
   const [currentPosition, setCurrentPosition] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [submitted, setSubmitted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -50,27 +51,15 @@ export function CandidateUploadForm({ jobId, jobTitle, businessName }: Props) {
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? "Failed to upload candidate details.");
+        throw new Error(data?.error ?? `Failed to upload candidate details. Status ${response.status}.`);
       }
 
-      setSubmitted(true);
+      router.push(`/apply/${jobId}/thank-you`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  if (submitted) {
-    return (
-      <div className="rounded-2xl border border-ink/10 bg-white px-5 py-6">
-        <p className="text-sm font-black uppercase text-ink">Application submitted</p>
-        <h2 className="mt-2 text-2xl font-black text-navy">Thank you</h2>
-        <p className="mt-3 text-sm leading-6 text-navy/70">
-          Your resume and profile details have been received. The hiring team will review your application.
-        </p>
-      </div>
-    );
   }
 
   return (

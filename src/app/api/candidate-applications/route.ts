@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { analyzeCandidateById } from "@/lib/candidate-analysis";
 import { extractPdfText } from "@/lib/pdf/extract-text";
@@ -54,7 +54,8 @@ export async function POST(request: Request) {
     const notes = optionalText(formData, "manual_profile_notes");
     const githubUrl = optionalUrl(formData, "github_url");
     const linkedinUrl = optionalUrl(formData, "linkedin_url");
-    const resumeText = await extractPdfText(Buffer.from(await resume.arrayBuffer()));
+    const resumeBuffer = Buffer.from(await resume.arrayBuffer());
+    const resumeText = await extractPdfText(resumeBuffer);
 
     if (!resumeText) {
       return NextResponse.json({ error: "Could not extract text from the uploaded resume PDF." }, { status: 400 });
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
       github_url: githubUrl,
       resume_text: resumeText,
       ai_candidate_output: {
-        status: "submitted",
+        status: "processing",
         submitted_application: {
           github_url: githubUrl,
           linkedin_url: linkedinUrl,
@@ -81,33 +82,37 @@ export async function POST(request: Request) {
     });
 
     if (insertError) {
+      console.error("Candidate application insert failed", insertError);
+
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
-    try {
-      await analyzeCandidateById(supabase, candidateId);
-    } catch (analysisError) {
-      await supabase
-        .from("candidates")
-        .update({
-          ai_candidate_output: {
-            status: "analysis_failed",
-            submitted_application: {
-              github_url: githubUrl,
-              linkedin_url: linkedinUrl,
-              manual_profile_notes: notes,
+    after(async () => {
+      try {
+        await analyzeCandidateById(supabase, candidateId);
+      } catch (analysisError) {
+        await supabase
+          .from("candidates")
+          .update({
+            ai_candidate_output: {
+              status: "analysis_failed",
+              submitted_application: {
+                github_url: githubUrl,
+                linkedin_url: linkedinUrl,
+                manual_profile_notes: notes,
+              },
+              analysis_error: analysisError instanceof Error ? analysisError.message : "Candidate analysis failed.",
             },
-            analysis_error: analysisError instanceof Error ? analysisError.message : "Candidate analysis failed.",
-          },
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", candidateId);
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", candidateId);
+      }
+    });
 
-      return NextResponse.json({ candidateId, analyzed: false });
-    }
-
-    return NextResponse.json({ candidateId, analyzed: true });
+    return NextResponse.json({ candidateId, processing: true }, { status: 202 });
   } catch (error) {
+    console.error("Candidate application failed", error);
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Candidate application failed." },
       { status: 500 }

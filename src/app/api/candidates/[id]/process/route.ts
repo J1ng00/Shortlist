@@ -137,8 +137,8 @@ export async function POST(_: Request, context: RouteContext) {
     await supabaseAdmin
       .from("candidates")
       .update({
-        full_name: extractedProfile.fullName || candidate.full_name,
-        email: extractedProfile.email || candidate.email,
+        full_name: candidate.full_name,
+        email: candidate.email,
         current_position: extractedProfile.currentRole || candidate.current_position,
         resume_text: resumeText,
         initial_fit_score: evaluation.fitScore,

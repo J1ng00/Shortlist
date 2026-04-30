@@ -1,5 +1,7 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+
 import { PageShell } from "@/components/page-shell";
-import { ButtonLink } from "@/components/ui";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { CandidateUploadForm } from "./candidate-upload-form";
 
@@ -31,10 +33,18 @@ export default async function NewCandidatePage({ searchParams }: NewCandidatePag
 
   return (
     <PageShell
-      eyebrow="Step 2"
       title="Upload candidate"
       description="Add the resume PDF and optional profile context that will feed candidate analysis and interview preparation."
-      actions={<ButtonLink href="/jobs/new" variant="secondary">Create job</ButtonLink>}
+      prefix={
+        <Link
+          aria-label="Back to jobs"
+          className="inline-flex text-ink transition hover:text-moss"
+          href="/jobs"
+          title="Back to jobs"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+      }
     >
       <CandidateUploadForm jobs={(jobs ?? []) as SavedJobOption[]} selectedJobId={jobId} />
     </PageShell>
