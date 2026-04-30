@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { Loader2, Upload } from "lucide-react";
 import { useFormStatus } from "react-dom";
 
-import { Card, Pill } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { createCandidate } from "./actions";
 
 type CandidateUploadFormProps = {
@@ -39,7 +38,6 @@ export function CandidateUploadForm({ jobs, selectedJobId }: CandidateUploadForm
       <Card>
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl font-black">Candidate details</h2>
-          <Pill>PDF upload</Pill>
         </div>
         <form action={createCandidate} className="mt-6 grid gap-5">
           <label className="grid gap-2 text-sm font-bold">
@@ -138,12 +136,6 @@ export function CandidateUploadForm({ jobs, selectedJobId }: CandidateUploadForm
           </label>
 
           <div className="flex flex-wrap gap-3">
-            <Link
-              className="inline-flex items-center justify-center rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/40"
-              href="/jobs"
-            >
-              Back
-            </Link>
             <SubmitButton disabled={!hasJobs} />
           </div>
         </form>

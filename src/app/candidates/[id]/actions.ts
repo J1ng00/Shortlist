@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { analyzeCandidateById } from "@/lib/candidate-analysis";
 import { sendInterviewInvitation } from "@/lib/email/interview-invitation";
+import { sendJobOfferEmail } from "@/lib/email/job-offer";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CandidateOutput = {
@@ -132,6 +133,24 @@ export async function updateCandidateDecision(formData: FormData) {
       companyName: job.business_name,
       interviewDate,
       interviewTime,
+    });
+    emailPreviewUrl = emailResult.previewUrl;
+  }
+
+  if (outcome === "hired") {
+    if (!data.email) {
+      throw new Error("Candidate does not have an email address for the job offer.");
+    }
+
+    if (!job) {
+      throw new Error("Candidate job context is missing.");
+    }
+
+    const emailResult = await sendJobOfferEmail({
+      candidateEmail: data.email,
+      candidateName: data.full_name,
+      appliedPosition: job.role_title,
+      companyName: job.business_name,
     });
     emailPreviewUrl = emailResult.previewUrl;
   }

@@ -7,6 +7,7 @@ import { useFormStatus } from "react-dom";
 import { Card } from "@/components/ui";
 import type { JobGenerationOutput, JobProfileDraft } from "@/lib/job-ai";
 import type { Job } from "@/lib/types";
+import { normalizeWorkType, workTypeOptions } from "@/lib/work-types";
 import { createJob, updateJob } from "./actions";
 
 function toText(items: string[]) {
@@ -424,7 +425,18 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
                 </label>
                 <label className="grid gap-2 text-sm font-bold">
                   Work type
-                  <input name="work_type" className="rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal outline-none focus:border-clay" defaultValue={job.workType} />
+                  <select
+                    name="work_type"
+                    className="rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal outline-none focus:border-clay"
+                    defaultValue={normalizeWorkType(job.workType) ?? ""}
+                  >
+                    <option value="">Select work type</option>
+                    {workTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
               <label className="grid gap-2 text-sm font-bold">
