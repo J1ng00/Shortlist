@@ -53,7 +53,7 @@ export default async function LiveInterviewPage({ params, searchParams }: LiveIn
       <PageShell
         eyebrow="Live interview"
         title="Candidate must be saved first"
-        description="Live interview rooms are only available for candidates stored in Supabase. Mock fallback candidates can still use the standard interview copilot page."
+        description="Live interview rooms are only available for candidates stored in Supabase."
         actions={<ButtonLink href={`/candidates/${id}`}>Back to scorecard</ButtonLink>}
       >
         <Card>
@@ -113,7 +113,6 @@ export default async function LiveInterviewPage({ params, searchParams }: LiveIn
           <ButtonLink href={`/candidates/${candidateRow.id}`} variant="secondary">
             Back to scorecard
           </ButtonLink>
-          <ButtonLink href={`/interview/${candidateRow.id}`}>Classic copilot</ButtonLink>
         </>
       }
     >

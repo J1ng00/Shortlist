@@ -1,4 +1,4 @@
-export type HiringStage = "review" | "interview" | "decision";
+export type HiringStage = "review" | "interview" | "reject" | "hired";
 
 export type Job = {
   id: string;

@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useId, useState } from "react";
+import { useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarClock, Loader2, X } from "lucide-react";
 import { useFormStatus } from "react-dom";
+
+import { LoadingPanel } from "@/components/ui";
 
 type ScheduleInterviewModalProps = {
   action: (formData: FormData) => void | Promise<void>;
@@ -17,14 +19,23 @@ function ScheduleSubmitButton() {
   const { pending } = useFormStatus();
 
   return (
-    <button
-      className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-ink px-5 text-sm font-black text-paper transition hover:bg-moss disabled:cursor-wait disabled:opacity-60"
-      disabled={pending}
-      type="submit"
-    >
-      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
-      {pending ? "Scheduling..." : "Schedule interview"}
-    </button>
+    <>
+      {pending ? (
+        <div className="absolute inset-0 z-10 grid place-items-center rounded-3xl bg-paper/80 p-6 backdrop-blur-sm">
+          <LoadingPanel title="Scheduling interview">
+            Saving the interview time and moving the candidate to the next stage.
+          </LoadingPanel>
+        </div>
+      ) : null}
+      <button
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-ink px-5 text-sm font-black text-paper shadow-panel transition hover:bg-navy disabled:cursor-wait disabled:opacity-60"
+        disabled={pending}
+        type="submit"
+      >
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+        {pending ? "Scheduling..." : "Schedule interview"}
+      </button>
+    </>
   );
 }
 
@@ -34,16 +45,16 @@ export function ScheduleInterviewModal({ action, candidateId, fullWidth = false,
   const widthClassName = fullWidth ? "w-full" : "w-fit";
   const buttonClassName =
     variant === "menu"
-      ? "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-bold text-ink transition hover:bg-moss/15"
+      ? "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-bold text-ink transition hover:bg-clay/45"
       : variant === "secondary"
-      ? `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40`
-      : `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-moss`;
+      ? `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full border border-ink/25 bg-paper px-4 py-2 text-sm font-black text-ink transition hover:border-ink/45 hover:bg-clay/55`
+      : `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-black text-paper shadow-panel transition hover:bg-navy`;
 
   function closeModal() {
     setIsOpen(false);
   }
 
-  function handleSubmit(_: FormEvent<HTMLFormElement>) {
+  function handleSubmit() {
     setIsOpen(false);
   }
 
@@ -52,7 +63,7 @@ export function ScheduleInterviewModal({ action, candidateId, fullWidth = false,
       <div
         aria-labelledby={titleId}
         aria-modal="true"
-        className="w-full max-w-md rounded-3xl border border-line bg-paper p-6 shadow-panel"
+        className="relative w-full max-w-md rounded-3xl border border-ink/20 bg-paper p-6 shadow-strong"
         role="dialog"
       >
         <div className="flex items-start justify-between gap-4">

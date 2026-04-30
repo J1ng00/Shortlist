@@ -10,8 +10,9 @@
   --shortlist-sky: #9fbaf2;
   --shortlist-ink: #223155;
   --shortlist-muted: #5f6f96;
-  --shortlist-border: #d9e2f6;
-  --shortlist-shadow: 0 16px 40px rgba(34, 49, 85, 0.1);
+  --shortlist-border: rgba(60, 87, 143, 0.24);
+  --shortlist-shadow: 0 18px 44px rgba(34, 49, 85, 0.14);
+  --shortlist-shadow-strong: 0 24px 70px rgba(34, 49, 85, 0.22);
 }
 
 * {
@@ -27,7 +28,9 @@ html {
 body {
   margin: 0;
   min-height: 100%;
-  background: var(--shortlist-cream);
+  background:
+    linear-gradient(90deg, rgba(60, 87, 143, 0.16), transparent 11rem, transparent calc(100% - 11rem), rgba(60, 87, 143, 0.16)),
+    linear-gradient(180deg, #fdfdf5 0%, #f3f6ff 54%, #fdfdf5 100%);
   color: var(--shortlist-ink);
   font-family: Outfit, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-feature-settings: "kern";
@@ -75,7 +78,7 @@ textarea::placeholder {
 }
 
 :focus-visible {
-  outline: 3px solid var(--shortlist-lime);
+  outline: 3px solid rgba(234, 243, 178, 0.95);
   outline-offset: 3px;
 }
 
@@ -94,6 +97,88 @@ textarea::placeholder {
   .shadow-soft {
     box-shadow: var(--shortlist-shadow);
   }
+
+  .shadow-strong {
+    box-shadow: var(--shortlist-shadow-strong);
+  }
+
+  .shortlist-grid {
+    background-image:
+      linear-gradient(rgba(60, 87, 143, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(60, 87, 143, 0.08) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  .shortlist-surface {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shortlist-surface::before {
+    background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.48) 45%, transparent 72%);
+    content: "";
+    height: 180%;
+    left: -70%;
+    opacity: 0;
+    position: absolute;
+    top: -40%;
+    transform: rotate(18deg);
+    transition: left 600ms ease, opacity 350ms ease;
+    width: 42%;
+  }
+
+  .shortlist-surface:hover::before {
+    left: 118%;
+    opacity: 0.75;
+  }
+}
+
+@keyframes shortlist-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shortlist-pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(234, 243, 178, 0.58);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px rgba(234, 243, 178, 0);
+  }
+}
+
+@keyframes shortlist-progress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@layer utilities {
+  .animate-shortlist-in {
+    animation: shortlist-fade-up 420ms ease both;
+  }
+
+  .animate-shortlist-dot {
+    animation: shortlist-pulse-dot 1.9s ease-in-out infinite;
+  }
+
+  .animate-shortlist-progress {
+    animation: shortlist-progress 700ms ease-out both;
+    transform-origin: left;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -104,5 +189,9 @@ textarea::placeholder {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .shortlist-surface::before {
+    display: none;
   }
 }

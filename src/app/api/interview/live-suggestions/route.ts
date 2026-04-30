@@ -22,17 +22,6 @@ type CandidateAiOutput = {
   skill_match?: unknown;
 };
 
-const fallbackSuggestions: LiveSuggestions = {
-  followUpQuestions: [
-    "Can you give a specific example with your role, action, and result?",
-    "What tradeoffs did you consider, and what would you do differently now?"
-  ],
-  coveredFollowUpQuestions: [],
-  flags: ["Look for vague answers that do not include evidence, scope, or outcomes."],
-  evidenceCaptured: ["Transcript is being captured. Use it to verify must-have skills and working style evidence."],
-  meetingNotes: ["AI suggestions are in fallback mode until OpenAI returns live guidance."]
-};
-
 const liveSuggestionsSchema = {
   type: "object",
   additionalProperties: false,
@@ -191,6 +180,57 @@ function fallbackFromContext({
   };
 }
 
+function interviewSummaryFromSuggestions(data: LiveSuggestions, notes: string) {
+  const transcriptAvailable = notes.trim().length > 0;
+  const meetingNotes = liveMeetingNotesOnly(data.meetingNotes);
+
+  if (!transcriptAvailable && meetingNotes.length === 0) {
+    return null;
+  }
+
+  return {
+    headline: "Interview transcript reviewed",
+    summary: meetingNotes.length
+      ? meetingNotes.slice(0, 3).join(" ")
+      : "Live transcript has been captured. Review the saved notes before making a final decision.",
+    strengths: data.evidenceCaptured.slice(0, 4),
+    concerns: data.flags.slice(0, 4),
+    nextStep: data.followUpQuestions[0] ?? "Review the transcript evidence before making a final decision.",
+    finalizedAt: new Date().toISOString()
+  };
+}
+
+async function saveInterviewSummary({
+  candidateId,
+  candidateOutput,
+  data,
+  notes,
+  supabase
+}: {
+  candidateId: string;
+  candidateOutput: CandidateAiOutput;
+  data: LiveSuggestions;
+  notes: string;
+  supabase: ReturnType<typeof createServerSupabaseClient>;
+}) {
+  const interviewSummary = interviewSummaryFromSuggestions(data, notes);
+
+  if (!interviewSummary) {
+    return;
+  }
+
+  await supabase
+    .from("candidates")
+    .update({
+      ai_candidate_output: {
+        ...candidateOutput,
+        interview_summary: interviewSummary
+      },
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", candidateId);
+}
+
 export async function POST(request: Request) {
   const { candidateId, sessionId } = (await request.json()) as {
     candidateId?: string;
@@ -242,6 +282,14 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
+    await saveInterviewSummary({
+      candidateId,
+      candidateOutput,
+      data: fallback,
+      notes,
+      supabase
+    });
+
     return Response.json({ data: fallback, source: "fallback", error: "Missing OPENAI_API_KEY." });
   }
 
@@ -310,9 +358,24 @@ export async function POST(request: Request) {
     });
 
     await supabase.from("interview_sessions").update({ ai_interview_output: data }).eq("id", sessionId);
+    await saveInterviewSummary({
+      candidateId,
+      candidateOutput,
+      data,
+      notes,
+      supabase
+    });
 
     return Response.json({ data, source: "openai" });
   } catch (error) {
+    await saveInterviewSummary({
+      candidateId,
+      candidateOutput,
+      data: fallback,
+      notes,
+      supabase
+    });
+
     return Response.json({
       data: fallback,
       source: "fallback",

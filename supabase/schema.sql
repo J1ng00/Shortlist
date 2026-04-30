@@ -40,7 +40,7 @@ create table public.candidates (
   resume_text text,
   ai_candidate_output jsonb not null default '{}'::jsonb,
   initial_fit_score integer check (initial_fit_score between 0 and 100),
-  stage text not null default 'review' check (stage in ('review', 'interview', 'decision')),
+  stage text not null default 'review' check (stage in ('review', 'interview', 'reject', 'hired')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -100,5 +100,3 @@ on storage.objects for update
 to anon
 using (bucket_id = 'candidate-resumes')
 with check (bucket_id = 'candidate-resumes');
-
-
