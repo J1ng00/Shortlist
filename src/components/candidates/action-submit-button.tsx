@@ -16,10 +16,10 @@ export function ActionSubmitButton({ children, fullWidth = false, pendingLabel, 
   const widthClassName = fullWidth ? "w-full" : "w-fit";
   const className =
     variant === "secondary"
-      ? `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-wait disabled:opacity-60`
+      ? `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full border border-ink/25 bg-paper px-4 py-2 text-sm font-black text-ink transition hover:border-ink/45 hover:bg-clay/55 disabled:cursor-wait disabled:opacity-60`
       : variant === "danger"
-        ? `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full border border-clay/40 bg-clay/25 px-4 py-2 text-sm font-bold text-ink transition hover:bg-clay/40 disabled:cursor-wait disabled:opacity-60`
-        : `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-moss disabled:cursor-wait disabled:opacity-60`;
+        ? `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full border border-red-300 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:cursor-wait disabled:opacity-60`
+        : `inline-flex ${widthClassName} items-center justify-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-black text-paper shadow-panel transition hover:bg-navy disabled:cursor-wait disabled:opacity-60`;
 
   return (
     <button className={className} disabled={pending} type="submit">

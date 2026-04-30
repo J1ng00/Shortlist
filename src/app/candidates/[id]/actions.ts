@@ -86,11 +86,12 @@ export async function updateCandidateDecision(formData: FormData) {
     throw new Error("Candidate id is required.");
   }
 
-  const decisionMap: Record<string, { stage: "review" | "interview" | "decision"; label: string }> = {
-    review: { stage: "review", label: "Keep in review" },
-    next_stage: { stage: "interview", label: "Move to next stage" },
-    rejected: { stage: "decision", label: "Rejected" },
-    hired: { stage: "decision", label: "Hire" },
+  const decisionMap: Record<string, { stage: "review" | "interview" | "reject" | "hired"; label: string }> = {
+    review: { stage: "review", label: "Review" },
+    next_stage: { stage: "interview", label: "Interview" },
+    reject: { stage: "reject", label: "Rejected" },
+    rejected: { stage: "reject", label: "Rejected" },
+    hired: { stage: "hired", label: "Hired" },
   };
   const decision = decisionMap[outcome];
 

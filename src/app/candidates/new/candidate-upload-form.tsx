@@ -20,7 +20,7 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
 
   return (
     <button
-      className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss disabled:cursor-not-allowed disabled:bg-ink/30 disabled:text-paper/70"
+      className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-black text-paper shadow-panel transition hover:bg-navy disabled:cursor-not-allowed disabled:bg-ink/30 disabled:text-paper/70"
       disabled={disabled || pending}
       type="submit"
     >

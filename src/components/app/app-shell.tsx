@@ -44,7 +44,7 @@ export function AppShell({ children, focused = false }: AppShellProps) {
 
   if (focused) {
     return (
-      <main className="min-h-screen bg-sand text-navy">
+      <main className="min-h-screen bg-sand text-navy shortlist-grid">
         <div
           className={`grid min-h-screen transition-[grid-template-columns] duration-200 ${
             isSidebarCollapsed ? "lg:grid-cols-[80px_1fr]" : "lg:grid-cols-[248px_1fr]"
@@ -62,7 +62,7 @@ export function AppShell({ children, focused = false }: AppShellProps) {
   }
 
   return (
-    <main className="min-h-screen bg-sand text-navy">
+      <main className="min-h-screen bg-sand text-navy shortlist-grid">
       <div
         className={`grid min-h-screen transition-[grid-template-columns] duration-200 ${
           isSidebarCollapsed ? "lg:grid-cols-[80px_1fr]" : "lg:grid-cols-[248px_1fr]"

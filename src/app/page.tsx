@@ -46,8 +46,12 @@ function candidateRole(row: RecentCandidate) {
   return row.current_position || row.ai_candidate_output?.extracted_profile?.currentRole || "Role not provided";
 }
 
-function candidateScore(row: RecentCandidate) {
-  return row.ai_candidate_output?.initial_fit_score ?? row.initial_fit_score;
+function recentCandidateStatus(row: RecentCandidate) {
+  if (row.ai_candidate_output?.status === "ready") {
+    return "Analyzed";
+  }
+
+  return row.ai_candidate_output?.status ?? "Submitted";
 }
 
 const flow = [
@@ -65,7 +69,7 @@ const flow = [
   },
   {
     title: "Review pipeline",
-    description: "Search applicants, compare fit scores, and open candidate summaries.",
+    description: "Search applicants, review statuses, and open candidate summaries.",
     href: "/candidates",
     icon: FileText,
   },
@@ -102,7 +106,7 @@ export default async function Home() {
     <PageShell
       eyebrow="Hiring overview"
       title="Shortlist pipeline"
-      description="Track applications across roles, review AI fit scores, and move candidates from submitted to interview-ready."
+      description="Track applications across roles and move candidates from submitted to interview-ready."
       actions={
         <>
           <ButtonLink href="/jobs/new">Start job profile</ButtonLink>
@@ -111,23 +115,33 @@ export default async function Home() {
       }
     >
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="rounded-2xl">
-          <p className="text-sm font-bold text-navy/60">Open roles</p>
-          <p className="mt-2 text-3xl font-black text-ink">{jobCount ?? 0}</p>
-        </Card>
-        <Card className="rounded-2xl">
-          <p className="text-sm font-bold text-navy/60">Recent applicants</p>
-          <p className="mt-2 text-3xl font-black text-ink">{recentCandidates.length}</p>
-        </Card>
+        <section className="animate-shortlist-in rounded-2xl border border-ink/20 bg-paper p-6 shadow-panel transition duration-300 hover:-translate-y-0.5 hover:shadow-strong">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-black text-navy/70">Open roles</p>
+              <p className="mt-2 text-4xl font-black text-ink">{jobCount ?? 0}</p>
+            </div>
+            <span className="h-12 w-2 rounded-full bg-ink" aria-hidden="true" />
+          </div>
+        </section>
+        <section className="animate-shortlist-in rounded-2xl border border-ink/20 bg-paper p-6 shadow-panel transition duration-300 hover:-translate-y-0.5 hover:shadow-strong">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-black text-navy/70">Recent applicants</p>
+              <p className="mt-2 text-4xl font-black text-ink">{recentCandidates.length}</p>
+            </div>
+            <span className="h-12 w-2 rounded-full bg-clay ring-1 ring-ink/20" aria-hidden="true" />
+          </div>
+        </section>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
-        <Card className="overflow-hidden rounded-2xl">
+        <Card className="overflow-hidden rounded-2xl border-ink/25">
           <div className="flex flex-wrap items-center gap-2">
             <Pill tone="good">{readyCount} analyzed</Pill>
             <Pill>{recentCandidates.length - readyCount} awaiting AI review</Pill>
           </div>
-          <h2 className="mt-5 text-3xl font-black tracking-tight">Core workflow</h2>
+          <h2 className="mt-5 text-3xl font-black text-navy">Core workflow</h2>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             {flow.map((step) => {
               const Icon = step.icon;
@@ -135,12 +149,14 @@ export default async function Home() {
                 <Link
                   key={step.title}
                   href={step.href}
-                  className="group rounded-2xl border border-ink/10 bg-white/60 p-5 transition hover:-translate-y-0.5 hover:border-clay/40 hover:shadow-soft"
+                  className="shortlist-surface group rounded-2xl border border-ink/20 bg-white p-5 shadow-panel transition duration-300 hover:-translate-y-1 hover:border-ink/35 hover:shadow-strong"
                 >
-                  <Icon className="h-7 w-7 text-clay" />
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-ink text-paper shadow-panel transition group-hover:bg-navy">
+                    <Icon className="h-5 w-5" />
+                  </span>
                   <h3 className="mt-4 text-lg font-black">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-ink/60">{step.description}</p>
-                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-moss">
+                  <p className="mt-2 text-sm leading-6 text-navy/72">{step.description}</p>
+                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-black text-ink">
                     Open <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                   </div>
                 </Link>
@@ -149,10 +165,10 @@ export default async function Home() {
           </div>
         </Card>
 
-        <Card className="rounded-2xl">
+        <Card className="rounded-2xl border-ink/25">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-bold text-ink/60">Recent candidates</p>
+              <p className="text-sm font-bold text-ink/70">Recent candidates</p>
               <h2 className="mt-1 text-2xl font-black">Applicant activity</h2>
             </div>
           </div>
@@ -160,12 +176,11 @@ export default async function Home() {
             {recentCandidates.length ? (
               recentCandidates.map((candidate) => {
                 const job = normalizeJob(candidate);
-                const score = candidateScore(candidate);
 
                 return (
                   <Link
                     key={candidate.id}
-                    className="block rounded-xl border border-line bg-white p-4 transition hover:border-ink/30 hover:bg-moss/10"
+                    className="block rounded-xl border border-ink/20 bg-white p-4 shadow-[0_1px_0_rgba(60,87,143,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-ink/35 hover:bg-clay/35"
                     href={`/candidates/${candidate.id}`}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -178,8 +193,8 @@ export default async function Home() {
                           </p>
                         ) : null}
                       </div>
-                      <span className="shrink-0 rounded-full bg-ink px-3 py-1 text-xs font-black text-paper">
-                        {score ?? "--"}
+                      <span className="shrink-0 rounded-full border border-ink/20 bg-paper px-3 py-1 text-xs font-black text-ink">
+                        {recentCandidateStatus(candidate)}
                       </span>
                     </div>
                   </Link>

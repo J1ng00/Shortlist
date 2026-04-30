@@ -69,7 +69,7 @@ type CandidateRow = {
   resume_text: string | null;
   ai_candidate_output: CandidateAiOutput | null;
   initial_fit_score: number | null;
-  stage: "review" | "interview" | "decision";
+  stage: "review" | "interview" | "reject" | "hired";
   created_at: string;
   jobs:
     | {
@@ -237,6 +237,36 @@ function stageTone(status: string): "good" | "warn" | "neutral" {
   return "neutral";
 }
 
+function displayStatus(row: CandidateRow) {
+  const outcome = row.ai_candidate_output?.hr_decision?.outcome;
+
+  if (outcome === "rejected" || row.stage === "reject") {
+    return "reject";
+  }
+
+  if (outcome === "hired" || row.stage === "hired") {
+    return "hired";
+  }
+
+  return row.stage;
+}
+
+function statusClassName(status: string) {
+  if (status === "hired") {
+    return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  }
+
+  if (status === "reject") {
+    return "border-red-300 bg-red-50 text-red-700";
+  }
+
+  if (status === "interview") {
+    return "border-ink/20 bg-moss/35 text-ink";
+  }
+
+  return "border-ink/20 bg-white text-ink";
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function CandidatesPage({ searchParams }: CandidatesPageProps) {
@@ -257,9 +287,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
     return stageMatch && matchesSearch(row, q);
   });
   const readyCount = rows.filter((row) => candidateStatus(row) === "ready").length;
-  const averageScore = rows.length
-    ? Math.round(rows.reduce((total, row) => total + (candidateScore(row) ?? 0), 0) / rows.length)
-    : 0;
+  const interviewCount = rows.filter((row) => displayStatus(row) === "interview").length;
 
   return (
     <PageShell
@@ -283,8 +311,8 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
           <p className="mt-2 text-3xl font-black text-ink">{readyCount}</p>
         </Card>
         <Card className="rounded-2xl">
-          <p className="text-sm font-bold text-navy/60">Average AI fit</p>
-          <p className="mt-2 text-3xl font-black text-ink">{averageScore}/100</p>
+          <p className="text-sm font-bold text-navy/60">Interview stage</p>
+          <p className="mt-2 text-3xl font-black text-ink">{interviewCount}</p>
         </Card>
       </div>
 
@@ -307,7 +335,8 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
             <option value="all">All stages</option>
             <option value="review">Review</option>
             <option value="interview">Interview</option>
-            <option value="decision">Decision</option>
+            <option value="reject">Rejected</option>
+            <option value="hired">Hired</option>
           </select>
           <button className="h-12 rounded-xl bg-ink px-5 text-sm font-black text-paper" type="submit">
             Search
@@ -320,11 +349,12 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
           filtered.map((row) => {
             const job = normalizeJob(row);
             const status = candidateStatus(row);
-            const score = candidateScore(row);
-            const skills = candidateSkills(row);
             const interviewSummary = row.ai_candidate_output?.interview_summary;
             const scheduledInterview = scheduledInterviewLabel(row);
             const currentRecommendation = processRecommendation(row);
+            const statusLabel = displayStatus(row);
+            const isRejected = statusLabel === "reject";
+            const isHired = statusLabel === "hired";
             const links = {
               github: row.github_url ?? row.ai_candidate_output?.submitted_application?.github_url,
               linkedin: row.ai_candidate_output?.submitted_application?.linkedin_url,
@@ -336,7 +366,9 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <Pill tone={stageTone(status)}>{status === "ready" ? "AI analyzed" : status}</Pill>
-                      <Pill>{row.ai_candidate_output?.hr_decision?.label ?? row.stage}</Pill>
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClassName(statusLabel)}`}>
+                        {statusLabel}
+                      </span>
                       <Pill>{recommendationLabel(row)}</Pill>
                       {job ? <Pill>{job.role_title}</Pill> : null}
                     </div>
@@ -382,12 +414,6 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                       </div>
                     ) : null}
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {skills.slice(0, 6).map((skill) => (
-                        <Pill key={skill}>{skill}</Pill>
-                      ))}
-                    </div>
-
                     <div className="mt-4 flex flex-wrap gap-3 text-sm font-bold text-ink">
                       {links.github ? (
                         <a className="inline-flex items-center gap-2 hover:text-moss" href={links.github} rel="noreferrer" target="_blank">
@@ -405,11 +431,8 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                   </div>
 
                   <div className="rounded-xl border border-line bg-white p-4">
-                    <p className="text-xs font-black uppercase text-navy/55">AI fit score</p>
-                    <p className="mt-2 text-3xl font-black text-ink">{score ?? "--"}{score == null ? "" : "/100"}</p>
-                    <div className="mt-3 h-2 rounded-full bg-sand">
-                      <div className="h-2 rounded-full bg-ink" style={{ width: `${score ?? 0}%` }} />
-                    </div>
+                    <p className="text-xs font-black uppercase text-navy/55">Status</p>
+                    <p className="mt-2 text-2xl font-black capitalize text-ink">{statusLabel}</p>
                     <div className="mt-4 grid gap-2">
                       <Link
                         className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-ink/20 bg-paper px-5 py-3 text-sm font-bold text-ink transition hover:border-ink/30"
@@ -417,7 +440,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                       >
                         Open
                       </Link>
-                      {status !== "ready" && row.resume_text ? (
+                      {status !== "ready" && row.resume_text && !isRejected && !isHired ? (
                         <form action={analyzeCandidate}>
                           <input name="candidate_id" type="hidden" value={row.id} />
                           <ActionSubmitButton fullWidth pendingLabel="Analyzing...">
@@ -428,23 +451,27 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
                       ) : null}
                     </div>
                     <div className="mt-4 grid gap-2">
-                      <ScheduleInterviewModal
-                        action={updateCandidateDecision}
-                        candidateId={row.id}
-                        fullWidth
-                        label={interviewSummary ? "Schedule another interview" : "Next stage"}
-                        variant="secondary"
-                      />
-                      <form action={updateCandidateDecision}>
-                        <input name="candidate_id" type="hidden" value={row.id} />
-                        <input name="outcome" type="hidden" value="hired" />
-                        <ActionSubmitButton fullWidth pendingLabel="Updating...">Hire now</ActionSubmitButton>
-                      </form>
-                      <form action={updateCandidateDecision}>
-                        <input name="candidate_id" type="hidden" value={row.id} />
-                        <input name="outcome" type="hidden" value="rejected" />
-                        <ActionSubmitButton fullWidth pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
-                      </form>
+                      {!isRejected && !isHired ? (
+                        <>
+                          <ScheduleInterviewModal
+                            action={updateCandidateDecision}
+                            candidateId={row.id}
+                            fullWidth
+                            label={interviewSummary ? "Schedule another interview" : "Next stage"}
+                            variant="secondary"
+                          />
+                          <form action={updateCandidateDecision}>
+                            <input name="candidate_id" type="hidden" value={row.id} />
+                            <input name="outcome" type="hidden" value="hired" />
+                            <ActionSubmitButton fullWidth pendingLabel="Updating...">Hire</ActionSubmitButton>
+                          </form>
+                          <form action={updateCandidateDecision}>
+                            <input name="candidate_id" type="hidden" value={row.id} />
+                            <input name="outcome" type="hidden" value="reject" />
+                            <ActionSubmitButton fullWidth pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
+                          </form>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>

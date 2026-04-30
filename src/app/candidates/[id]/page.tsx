@@ -1,9 +1,10 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, Github, Linkedin, Mail, MessageSquareText, Mic2, ShieldCheck, Sparkles, UserRound, Video } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Github, Linkedin, Mail, MessageSquareText, ShieldCheck, Sparkles, UserRound, Video } from "lucide-react";
 import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
-import { ButtonLink, Card, Pill } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
+import { AskAiModal } from "@/components/candidates/ask-ai-modal";
 import { ScheduleInterviewModal } from "@/components/candidates/schedule-interview-modal";
 import { getCandidate, getJob } from "@/lib/mock-data";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -68,6 +69,8 @@ type CandidateAiOutput = {
   analysis_error?: string;
 };
 
+type CandidateStatus = "review" | "interview" | "reject" | "hired";
+
 function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -110,17 +113,17 @@ function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput
 
   if (decision?.outcome === "rejected") {
     return {
-      label: "Decision made",
-      title: "Candidate has been rejected.",
-      body: decision.note ?? "This profile is stored as a decision-stage record. No further interview action is needed.",
-      action: "No next action required unless you want to revisit the decision.",
+      label: "Rejected",
+      title: "Candidate rejected",
+      body: null,
+      action: decision.note ?? "No next action required unless the decision is reopened.",
     };
   }
 
   if (decision?.outcome === "hired") {
     return {
-      label: "Decision made",
-      title: "Candidate is marked for hire.",
+      label: "Hired",
+      title: "Candidate marked for hire",
       body: decision.note ?? "This profile has reached the final decision stage.",
       action: "Prepare offer or onboarding follow-up outside the screening flow.",
     };
@@ -140,7 +143,7 @@ function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput
       label: scheduledInterview ? "Interview scheduled" : "Interview stage",
       title: scheduledInterview ? `Interview scheduled for ${scheduledInterview}.` : "Candidate is ready for interview.",
       body: decision?.note ?? "The candidate has been moved out of review and into the interview process.",
-      action: scheduledInterview ? "Run the interview, then record the interview summary before making a final decision." : "Schedule an interview or start the interview copilot.",
+      action: scheduledInterview ? "Run the live interview, then record the interview summary before making a final decision." : "Schedule an interview or join the live interview.",
     };
   }
 
@@ -170,7 +173,40 @@ function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput
   };
 }
 
-async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiOutput: CandidateAiOutput; aiStatus?: string; skillMatch?: CandidateAiOutput["skill_match"]; email?: string | null; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
+function candidateStatus(candidate: Candidate, aiOutput: CandidateAiOutput): CandidateStatus {
+  if (aiOutput.hr_decision?.outcome === "rejected" || candidate.stage === "reject") {
+    return "reject";
+  }
+
+  if (aiOutput.hr_decision?.outcome === "hired" || candidate.stage === "hired") {
+    return "hired";
+  }
+
+  return candidate.stage === "interview" ? "interview" : "review";
+}
+
+function statusLabel(status: CandidateStatus) {
+  return {
+    review: "Review",
+    interview: "Interview",
+    reject: "Rejected",
+    hired: "Hired"
+  }[status];
+}
+
+function aiStatusLabel(aiStatus: string | undefined, source: "supabase" | "mock") {
+  if (aiStatus === "ready" || source === "mock") {
+    return "AI analyzed";
+  }
+
+  if (aiStatus === "failed") {
+    return "AI failed";
+  }
+
+  return aiStatus ?? "Awaiting AI";
+}
+
+async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiOutput: CandidateAiOutput; aiStatus?: string; email?: string | null; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
   const { data } = await supabaseAdmin
     .from("candidates")
     .select("*, jobs(*)")
@@ -232,7 +268,6 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
     job,
     aiOutput: output,
     aiStatus: output.status,
-    skillMatch: output.skill_match,
     email: data.email,
     linkedinUrl: data.linkedin_url ?? submittedApplication.linkedin_url,
     source: "supabase",
@@ -241,159 +276,182 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
 
 export default async function CandidatePage({ params }: CandidatePageProps) {
   const { id } = await params;
-  const { candidate, job, aiOutput, aiStatus, skillMatch, email, linkedinUrl, source } = await getCandidateView(id);
+  const { candidate, job, aiOutput, aiStatus, email, linkedinUrl, source } = await getCandidateView(id);
 
-  const matchSignals = [
-    { label: "Matched skills", value: skillMatch?.matched?.length ?? candidate.extractedSkills.length },
-    { label: "Partial matches", value: skillMatch?.partial?.length ?? candidate.strengths.length },
-    { label: "Missing skills", value: skillMatch?.missing?.length ?? candidate.missingRequirements.length }
-  ];
-  const skillMatchGroups = skillMatch
-    ? [
-        { label: "Matched", skills: skillMatch.matched ?? [] },
-        { label: "Partial", skills: skillMatch.partial ?? [] },
-        { label: "Missing", skills: skillMatch.missing ?? [] },
-      ]
-    : null;
   const recommendationLabel = candidate.fitScore >= 80 ? "Strong fit" : candidate.fitScore >= 60 ? "Potential fit" : "Needs review";
   const currentRecommendation = processRecommendation(candidate, aiOutput, aiStatus);
   const canAnalyze = source === "supabase" && aiStatus !== "ready";
   const candidateIsSaved = source === "supabase";
+  const status = candidateStatus(candidate, aiOutput);
+  const isRejected = status === "reject";
+  const isHired = status === "hired";
+  const isFinal = isRejected || isHired;
+  const skillMatch = aiOutput.skill_match ?? {};
+  const matchedSkills = skillMatch.matched ?? [];
+  const partialSkills = skillMatch.partial ?? [];
+  const missingSkills = skillMatch.missing ?? [];
 
   return (
     <PageShell
       eyebrow="Candidate profile"
       title={candidate.name}
       description={`${candidate.currentRole} for ${job.title}. Review the AI summary, evidence, gaps, and interview prompts before moving to the next stage.`}
-      actions={
-        <>
-          <ButtonLink href="/candidates" variant="secondary">Back to candidates</ButtonLink>
-          {canAnalyze ? (
-            <form action={analyzeCandidate}>
-              <input name="candidate_id" type="hidden" value={candidate.id} />
-              <ActionSubmitButton pendingLabel="Analyzing...">
-                <Sparkles className="h-4 w-4" />
-                Analyze fit
-              </ActionSubmitButton>
-            </form>
-          ) : null}
-          <ButtonLink href={`/candidates/${candidate.id}/ask-ai`} variant="secondary">Ask AI</ButtonLink>
-          <details className="group relative">
-            <summary className="inline-flex cursor-pointer list-none items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-paper transition hover:bg-moss [&::-webkit-details-marker]:hidden">
-              Interview
-              <ChevronDown className="h-4 w-4 transition group-open:rotate-180" />
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 w-64 rounded-xl border border-line bg-paper p-2 shadow-panel">
-              <Link
-                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-ink transition hover:bg-moss/15"
-                href={`/interview/${candidate.id}`}
-              >
-                <Mic2 className="h-4 w-4" />
-                Start interview copilot
-              </Link>
-              {candidateIsSaved ? (
-                <>
-                  <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} label="Schedule interview" variant="menu" />
-                  <Link
-                    className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-ink transition hover:bg-moss/15"
-                    href={`/interview/${candidate.id}/live`}
-                  >
-                    <Video className="h-4 w-4" />
-                    Join live interview
-                  </Link>
-                </>
-              ) : null}
-            </div>
-          </details>
-        </>
-      }
     >
       <div className="space-y-6">
+        <Link href="/candidates" className="inline-flex items-center gap-2 text-sm font-black text-ink transition hover:text-navy">
+          <ArrowLeft className="h-4 w-4" />
+          Candidates
+        </Link>
+
+        {candidateIsSaved && !isFinal ? (
+          <div className="flex justify-end">
+            <Link
+              className="inline-flex w-fit items-center justify-center gap-2 rounded-full border border-ink/15 bg-white/75 px-3 py-2 text-sm font-black text-ink shadow-sm transition hover:border-ink/30 hover:bg-moss/20"
+              href={`/interview/${candidate.id}/live`}
+              title="Interview Room: Run the live interview workspace"
+            >
+              <Video className="h-4 w-4" />
+              Live interview
+            </Link>
+          </div>
+        ) : null}
+
         <Card className="overflow-hidden p-0">
-          <div className="grid gap-6 p-6 lg:grid-cols-[1fr_280px] lg:items-center">
+          <div className="grid gap-6 p-6 lg:grid-cols-[1fr_520px] lg:items-center">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-line bg-moss/25 text-ink">
                 <UserRound className="h-9 w-9" />
               </div>
               <div className="min-w-0">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <Pill tone="good">{aiOutput.hr_decision?.label ?? candidate.stage}</Pill>
-                  <Pill>{aiStatus === "ready" || source === "mock" ? "AI analyzed" : aiStatus ?? "Awaiting AI"}</Pill>
-                </div>
                 <h2 className="text-3xl font-black text-navy">{candidate.name}</h2>
                 <p className="mt-2 text-base font-bold text-navy/65">
                   {candidate.currentRole} · {candidate.experienceYears}+ years · {candidate.location}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {candidate.extractedSkills.slice(0, 3).map((skill) => (
-                    <Pill key={skill}>{skill}</Pill>
-                  ))}
-                </div>
-                {candidateIsSaved ? (
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <form action={updateCandidateDecision}>
-                      <input name="candidate_id" type="hidden" value={candidate.id} />
-                      <input name="outcome" type="hidden" value="review" />
-                      <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep in review</ActionSubmitButton>
-                    </form>
-                    <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} />
-                    <form action={updateCandidateDecision}>
-                      <input name="candidate_id" type="hidden" value={candidate.id} />
-                      <input name="outcome" type="hidden" value="hired" />
-                      <ActionSubmitButton pendingLabel="Updating...">Hire now</ActionSubmitButton>
-                    </form>
-                    <form action={updateCandidateDecision}>
-                      <input name="candidate_id" type="hidden" value={candidate.id} />
-                      <input name="outcome" type="hidden" value="rejected" />
-                      <ActionSubmitButton pendingLabel="Updating..." variant="danger">Reject candidate</ActionSubmitButton>
-                    </form>
-                  </div>
-                ) : null}
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="rounded-xl border border-ink/20 bg-moss/25 p-5">
+            <div className="grid gap-3 md:grid-cols-[0.85fr_1fr]">
+              <div className="rounded-2xl border border-ink/20 bg-ink p-4 text-paper shadow-panel">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase text-paper/55">Current status</p>
+                    <p className="mt-2 text-2xl font-black leading-none">{statusLabel(status)}</p>
+                  </div>
+                  <span className="inline-flex shrink-0 whitespace-nowrap rounded-full border border-paper/15 bg-paper/10 px-3 py-1 text-[11px] font-black text-paper/70">
+                    {aiStatusLabel(aiStatus, source)}
+                  </span>
+                </div>
+                {aiOutput.hr_decision?.note && !isRejected ? (
+                  <p className="mt-4 text-sm leading-6 text-paper/75">{aiOutput.hr_decision.note}</p>
+                ) : null}
+                {aiOutput.hr_decision?.email_preview_url ? (
+                  <a
+                    className="mt-4 inline-flex rounded-full bg-paper px-3 py-2 text-xs font-black text-ink transition hover:bg-moss"
+                    href={aiOutput.hr_decision.email_preview_url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Email preview
+                  </a>
+                ) : null}
+              </div>
+
+              <div className="rounded-2xl border border-ink/20 bg-moss/25 p-4">
                 <p className="text-xs font-black uppercase text-ink">AI recommendation</p>
-                <div className="mt-3 flex items-end justify-between gap-4">
+                <div className="mt-2 flex items-end justify-between gap-4">
                   <p className="text-2xl font-black text-ink">{recommendationLabel}</p>
                   <p className="text-lg font-black text-navy">{candidate.fitScore}/100</p>
                 </div>
-                <div className="mt-4 h-2 rounded-full bg-white">
+                <div className="mt-3 h-2 rounded-full bg-white">
                   <div className="h-2 rounded-full bg-ink" style={{ width: `${candidate.fitScore}%` }} />
                 </div>
               </div>
-              {aiOutput.hr_decision ? (
-                <div className="rounded-xl border border-line bg-paper p-4">
-                  <p className="text-xs font-black uppercase text-navy/55">HR decision</p>
-                  <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-lg font-black text-ink">{aiOutput.hr_decision.label}</p>
-                      {aiOutput.hr_decision.note ? <p className="mt-2 text-sm leading-6 text-navy/65">{aiOutput.hr_decision.note}</p> : null}
-                    </div>
-                    {aiOutput.hr_decision.email_preview_url ? (
-                      <a
-                        className="inline-flex shrink-0 rounded-full bg-ink px-3 py-2 text-xs font-black text-paper transition hover:bg-moss"
-                        href={aiOutput.hr_decision.email_preview_url}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Open email preview
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
         </Card>
+
+        {candidateIsSaved ? (
+          <div className="grid gap-4 lg:grid-cols-[1fr_0.85fr]">
+            {!isFinal ? (
+              <>
+                <div className="rounded-2xl border border-ink/15 bg-paper p-4 shadow-sm">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs font-black uppercase text-navy/55">Stage</p>
+                      <div className="mt-3 flex items-center gap-3">
+                        <span className={`h-3 w-3 rounded-full ${status === "review" ? "bg-ink ring-4 ring-ink/15" : "bg-navy/25"}`} />
+                        <span className="text-sm font-black text-navy">Review</span>
+                        <span className="h-px w-10 bg-ink/20" />
+                        <span className={`h-3 w-3 rounded-full ${status === "interview" ? "bg-ink ring-4 ring-ink/15" : "bg-navy/25"}`} />
+                        <span className="text-sm font-black text-navy">Interview</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <form action={updateCandidateDecision}>
+                        <input name="candidate_id" type="hidden" value={candidate.id} />
+                        <input name="outcome" type="hidden" value="review" />
+                        <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep reviewing</ActionSubmitButton>
+                      </form>
+                      <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} label="Schedule" />
+                      {canAnalyze ? (
+                        <form action={analyzeCandidate}>
+                          <input name="candidate_id" type="hidden" value={candidate.id} />
+                          <ActionSubmitButton pendingLabel="Analyzing..." variant="secondary">
+                            <Sparkles className="h-4 w-4" />
+                            Analyze
+                          </ActionSubmitButton>
+                        </form>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-ink/20 bg-white p-4 shadow-sm">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black uppercase text-navy/55">Decision</p>
+                      <p className="mt-1 text-sm font-bold text-navy/65">Final outcome</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 sm:w-56">
+                      <form action={updateCandidateDecision}>
+                        <input name="candidate_id" type="hidden" value={candidate.id} />
+                        <input name="outcome" type="hidden" value="hired" />
+                        <ActionSubmitButton fullWidth pendingLabel="Updating...">Hire</ActionSubmitButton>
+                      </form>
+                      <form action={updateCandidateDecision}>
+                        <input name="candidate_id" type="hidden" value={candidate.id} />
+                        <input name="outcome" type="hidden" value="reject" />
+                        <ActionSubmitButton fullWidth pendingLabel="Updating..." variant="danger">Reject</ActionSubmitButton>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-ink/15 bg-paper p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase text-navy/55">Status action</p>
+                    <p className="mt-1 text-sm font-bold text-navy/65">Return this candidate to review if the decision changes.</p>
+                  </div>
+                  <form action={updateCandidateDecision}>
+                    <input name="candidate_id" type="hidden" value={candidate.id} />
+                    <input name="outcome" type="hidden" value="review" />
+                    <ActionSubmitButton pendingLabel="Reopening..." variant="secondary">Reopen review</ActionSubmitButton>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
             <Card className="border-ink/20 bg-white">
               <p className="text-sm font-black text-ink">{currentRecommendation.label}</p>
               <h2 className="mt-2 text-2xl font-black text-navy">{currentRecommendation.title}</h2>
-              <p className="mt-4 max-w-4xl text-sm leading-7 text-navy/75">{currentRecommendation.body}</p>
+              {currentRecommendation.body ? (
+                <p className="mt-4 max-w-4xl text-sm leading-7 text-navy/75">{currentRecommendation.body}</p>
+              ) : null}
               <p className="mt-4 rounded-xl bg-moss/15 px-4 py-3 text-sm font-bold leading-6 text-navy">
                 Recommended action: {currentRecommendation.action}
               </p>
@@ -414,33 +472,53 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
             </Card>
 
             <Card>
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-black text-navy">Skill match</h2>
-                <div className="flex items-center gap-2 text-sm font-bold text-navy/60">
-                  <span className="h-2 w-2 rounded-full bg-ink" />
-                  Candidate requirements
+              <h2 className="text-xl font-black text-navy">Skill match</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-line bg-white p-4">
+                  <p className="text-xs font-black text-navy/55">Matched skills</p>
+                  <p className="mt-2 text-2xl font-black text-ink">{matchedSkills.length}</p>
+                </div>
+                <div className="rounded-lg border border-line bg-white p-4">
+                  <p className="text-xs font-black text-navy/55">Partial matches</p>
+                  <p className="mt-2 text-2xl font-black text-ink">{partialSkills.length}</p>
+                </div>
+                <div className="rounded-lg border border-line bg-white p-4">
+                  <p className="text-xs font-black text-navy/55">Missing skills</p>
+                  <p className="mt-2 text-2xl font-black text-ink">{missingSkills.length}</p>
                 </div>
               </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                {matchSignals.map((signal) => (
-                  <div key={signal.label} className="rounded-lg border border-line bg-white p-4">
-                    <p className="text-sm font-bold text-navy/65">{signal.label}</p>
-                    <p className="mt-2 text-2xl font-black text-ink">{signal.value}</p>
-                  </div>
-                ))}
-              </div>
-              {skillMatchGroups ? (
-                <div className="mt-5 grid gap-4 md:grid-cols-3">
-                  {skillMatchGroups.map(({ label, skills }) => (
-                    <div key={label}>
-                      <p className="mb-2 text-sm font-black text-navy">{label}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {skills.length ? skills.map((skill) => <Pill key={skill}>{skill}</Pill>) : <span className="text-sm text-navy/60">None</span>}
-                      </div>
-                    </div>
-                  ))}
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <div>
+                  <p className="text-sm font-black text-ink">Matched</p>
+                  <ul className="mt-2 space-y-2">
+                    {(matchedSkills.length ? matchedSkills : ["No matched skills returned yet."]).map((skill) => (
+                      <li key={skill} className="rounded-full border border-line bg-moss/15 px-3 py-2 text-xs font-black text-ink">
+                        {skill}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              ) : null}
+                <div>
+                  <p className="text-sm font-black text-ink">Partial</p>
+                  <ul className="mt-2 space-y-2">
+                    {(partialSkills.length ? partialSkills : ["No partial matches returned yet."]).map((skill) => (
+                      <li key={skill} className="rounded-full border border-line bg-white px-3 py-2 text-xs font-black text-ink">
+                        {skill}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-sm font-black text-ink">Missing</p>
+                  <ul className="mt-2 space-y-2">
+                    {(missingSkills.length ? missingSkills : ["No missing skills returned yet."]).map((skill) => (
+                      <li key={skill} className="rounded-full border border-ink/15 bg-clay/35 px-3 py-2 text-xs font-black text-ink">
+                        {skill}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </Card>
 
             <div className="grid gap-6 md:grid-cols-2">
@@ -626,6 +704,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
           </div>
         </Card>
 
+        <AskAiModal candidateId={candidate.id} candidateName={candidate.name} />
       </div>
     </PageShell>
   );
