@@ -828,11 +828,6 @@ export function LiveInterviewConsole({
                 title="Follow-up questions"
               />
               <SuggestionSection emptyText="No flags yet." items={suggestions.flags} title="Flags" />
-              <SuggestionSection
-                emptyText="No evidence captured yet."
-                items={suggestions.evidenceCaptured}
-                title="Evidence captured"
-              />
               <MeetingNotesSection
                 items={suggestions.meetingNotes}
                 manualMeetingNote={manualMeetingNote}

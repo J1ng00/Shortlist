@@ -302,7 +302,7 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
   return (
     <PageShell
       eyebrow="Candidates"
-      title="Candidate pipeline"
+      title="Candidate List"
       description="Review every submitted applicant, search across roles and profile details, and run AI fit analysis against each job profile."
       actions={
         <ButtonLink href="/candidates/new" variant="secondary">Add internally</ButtonLink>
