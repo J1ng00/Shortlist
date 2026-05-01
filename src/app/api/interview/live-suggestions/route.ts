@@ -187,6 +187,9 @@ function interviewSummaryFromSuggestions(data: LiveSuggestions, notes: string) {
   const meetingNotes = liveMeetingNotesOnly(data.meetingNotes);
   const candidateTranscriptLineCount = candidateLines.length;
   const meetingNoteCount = meetingNotes.length;
+  const nextStep = data.flags.length
+    ? "Review the highlighted concerns before deciding whether to progress."
+    : "Review the interview notes and decide whether to progress, reject, or schedule another interview.";
 
   if (candidateTranscriptLineCount === 0 && meetingNoteCount === 0) {
     return null;
@@ -199,7 +202,7 @@ function interviewSummaryFromSuggestions(data: LiveSuggestions, notes: string) {
       : "Live transcript has been captured. Review the saved notes before making a final decision.",
     strengths: data.evidenceCaptured.slice(0, 4),
     concerns: data.flags.slice(0, 4),
-    nextStep: data.followUpQuestions[0] ?? "Review the transcript evidence before making a final decision.",
+    nextStep,
     finalizedAt: new Date().toISOString(),
     source: "live_interview",
     candidateTranscriptLineCount,
@@ -312,7 +315,7 @@ export async function POST(request: Request) {
   try {
     const openai = new OpenAI({ apiKey });
     const response = await openai.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+      model: process.env.OPENAI_MODEL ?? "gpt-5.4",
       input: [
         {
           role: "system",
@@ -320,7 +323,7 @@ export async function POST(request: Request) {
             {
               type: "input_text",
               text:
-                "You are a live interview copilot for SME hiring managers. Give concise, evidence-based follow-up suggestions from the transcript. Compare the transcript against the suggested follow-up questions and identify questions that have already been answered or substantially covered. meetingNotes must summarize actual live interview content only, especially candidate answers. Do not put reminders, future actions, areas to validate, or prep notes in meetingNotes. If there are no candidate transcript lines and no existing meeting notes, return meetingNotes as an empty array. Human manager stays in control. Avoid culture fit language; use values alignment or working style alignment. Do not use auto-rejection language. Return only structured JSON."
+                "You are a live interview copilot for SME hiring managers. Give concise, evidence-based follow-up suggestions from the transcript. Compare the transcript against the suggested follow-up questions and identify questions that have already been answered or substantially covered. flags must include concerning, weak, unclear, contradictory, vague, unsupported, or risky candidate answers from the live interview as concise evidence items. Do not hide concerns only in meetingNotes. meetingNotes must summarize actual live interview content only, especially candidate answers, and should stay neutral. If a candidate answer is concerning, weak, unclear, contradictory, vague, unsupported, or risky, it may also be mentioned neutrally in meetingNotes, but it must appear as a concise item in flags. Do not put reminders, future actions, areas to validate, or prep notes in meetingNotes. If there are no candidate transcript lines and no existing meeting notes, return meetingNotes as an empty array. Human manager stays in control. Avoid culture fit language; use values alignment or working style alignment. Do not use auto-rejection language. Return only structured JSON."
             }
           ]
         },

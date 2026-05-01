@@ -339,7 +339,8 @@ Required local environment variables:
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-5.4-mini
+OPENAI_MODEL=gpt-5.4
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe
 ```
 
 Check Supabase connection:

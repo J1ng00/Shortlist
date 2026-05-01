@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-const transcriptionModel = process.env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe";
+const transcriptionModel = process.env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-transcribe";
 const transcriptionPrompt =
   process.env.OPENAI_TRANSCRIBE_PROMPT ??
   "This is an English hiring interview. Speakers may have Singaporean, Australian, or other accents. Preserve business, operations, software, GitHub, resume, and interview terminology. Do not invent words if speech is unclear.";

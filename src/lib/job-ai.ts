@@ -77,7 +77,7 @@ export async function generateJobKit(input: JobGenerationInput): Promise<JobGene
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+          model: process.env.OPENAI_MODEL ?? "gpt-5.4",
           temperature: 0.4,
           response_format: { type: "json_object" },
           messages: [
@@ -160,7 +160,7 @@ export async function generateJobProfileDraft(input: Pick<JobGenerationInput, "b
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+          model: process.env.OPENAI_MODEL ?? "gpt-5.4",
           temperature: 0.35,
           response_format: { type: "json_object" },
           messages: [

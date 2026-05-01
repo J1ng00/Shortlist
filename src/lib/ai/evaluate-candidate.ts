@@ -16,7 +16,7 @@ export async function evaluateCandidate(args: {
   evidenceContext?: unknown;
 }) {
   const response = await openai.responses.create({
-    model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+    model: process.env.OPENAI_MODEL ?? "gpt-5.4",
     input: [
       {
         role: "system",

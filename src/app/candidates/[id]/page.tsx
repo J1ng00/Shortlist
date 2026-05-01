@@ -136,6 +136,40 @@ function scheduleActionLabel(aiOutput: CandidateAiOutput) {
   return hasScheduledInterview(aiOutput) || completedInterviewCount(aiOutput) > 0 ? "Reschedule" : "Schedule";
 }
 
+function fallbackConcernFromSummary(summary: string | undefined) {
+  if (!summary) {
+    return null;
+  }
+
+  const concerningSentence = summary
+    .split(/(?<=[.!?])\s+/)
+    .find((sentence) => /concerning|concern|weak|unclear|needs further evaluation/i.test(sentence));
+
+  return concerningSentence?.trim() || null;
+}
+
+function displayedInterviewConcerns(summary: CandidateAiOutput["interview_summary"] | null) {
+  const concerns = summary?.concerns?.filter((concern) => concern.trim()) ?? [];
+
+  if (concerns.length > 0) {
+    return concerns;
+  }
+
+  const fallbackConcern = fallbackConcernFromSummary(summary?.summary);
+
+  return fallbackConcern ? [fallbackConcern] : [];
+}
+
+function displayedInterviewNextStep(summary: CandidateAiOutput["interview_summary"] | null) {
+  const nextStep = summary?.nextStep?.trim();
+
+  if (!nextStep || nextStep.endsWith("?")) {
+    return "Review the interview notes and highlighted concerns before making a final decision.";
+  }
+
+  return nextStep;
+}
+
 function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput, aiStatus?: string) {
   const scheduledInterview = scheduledInterviewLabel(aiOutput);
   const decision = aiOutput.hr_decision;
@@ -162,9 +196,9 @@ function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput
   if (interviewSummary) {
     return {
       label: "Interview completed",
-      title: interviewSummary.headline ?? "Interview completed.",
-      body: interviewSummary.summary ?? "The interview summary has been saved for this candidate.",
-      action: interviewSummary.nextStep ?? "Review interview evidence and choose whether to schedule another interview, reject, or progress to a final decision.",
+      title: "Interview completed.",
+      body: null,
+      action: displayedInterviewNextStep(interviewSummary),
     };
   }
 
@@ -340,6 +374,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
   const missingSkills = skillMatch.missing ?? [];
   const scheduledInterview = scheduledInterviewLabel(aiOutput);
   const interviewSummary = isRealInterviewSummary(aiOutput.interview_summary) ? aiOutput.interview_summary : null;
+  const interviewConcerns = displayedInterviewConcerns(interviewSummary);
 
   return (
     <PageShell
@@ -678,8 +713,8 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                   <div>
                     <p className="text-sm font-black text-ink">Concerns to validate</p>
                     <ul className="mt-2 space-y-2">
-                      {(interviewSummary.concerns?.length
-                        ? interviewSummary.concerns
+                      {(interviewConcerns.length
+                        ? interviewConcerns
                         : ["No interview concerns saved yet."]
                       ).map((item) => (
                         <li key={item} className="rounded-lg border border-ink/15 bg-white/75 p-3 text-sm leading-6 text-navy/75">

@@ -92,7 +92,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const response = await openai.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
+      model: process.env.OPENAI_MODEL ?? "gpt-5.4",
       input: [
         {
           role: "system",
