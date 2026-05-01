@@ -25,6 +25,16 @@ type TokenResponse = {
   url: string;
 };
 
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const responseText = await response.text();
+
+  try {
+    return responseText ? (JSON.parse(responseText) as T) : ({} as T);
+  } catch {
+    throw new Error("API returned an HTML page instead of JSON. If this is the ngrok candidate link, the ngrok warning or a server error page is blocking the request.");
+  }
+}
+
 export function LiveInterviewRoom({
   candidateName,
   className,
@@ -44,6 +54,7 @@ export function LiveInterviewRoom({
         const response = await fetch("/api/livekit/token", {
           method: "POST",
           headers: {
+            "ngrok-skip-browser-warning": "true",
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
@@ -52,12 +63,13 @@ export function LiveInterviewRoom({
           })
         });
 
+        const payload = await readJsonResponse<TokenResponse & { error?: string }>(response);
+
         if (!response.ok) {
-          const payload = (await response.json()) as { error?: string };
           throw new Error(payload.error ?? "Unable to join LiveKit room.");
         }
 
-        setConnection((await response.json()) as TokenResponse);
+        setConnection(payload);
       } catch (joinError) {
         setError(joinError instanceof Error ? joinError.message : "Unable to join LiveKit room.");
       }

@@ -183,10 +183,12 @@ function fallbackFromContext({
 }
 
 function interviewSummaryFromSuggestions(data: LiveSuggestions, notes: string) {
-  const transcriptAvailable = notes.trim().length > 0;
+  const { candidateLines } = parseTranscriptBySpeaker(notes);
   const meetingNotes = liveMeetingNotesOnly(data.meetingNotes);
+  const candidateTranscriptLineCount = candidateLines.length;
+  const meetingNoteCount = meetingNotes.length;
 
-  if (!transcriptAvailable && meetingNotes.length === 0) {
+  if (candidateTranscriptLineCount === 0 && meetingNoteCount === 0) {
     return null;
   }
 
@@ -198,7 +200,10 @@ function interviewSummaryFromSuggestions(data: LiveSuggestions, notes: string) {
     strengths: data.evidenceCaptured.slice(0, 4),
     concerns: data.flags.slice(0, 4),
     nextStep: data.followUpQuestions[0] ?? "Review the transcript evidence before making a final decision.",
-    finalizedAt: new Date().toISOString()
+    finalizedAt: new Date().toISOString(),
+    source: "live_interview",
+    candidateTranscriptLineCount,
+    meetingNoteCount
   };
 }
 

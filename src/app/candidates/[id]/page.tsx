@@ -54,12 +54,15 @@ type CandidateAiOutput = {
     interview_time?: string | null;
   };
   interview_summary?: {
+    candidateTranscriptLineCount?: number;
     headline?: string;
+    meetingNoteCount?: number;
     summary?: string;
     strengths?: string[];
     concerns?: string[];
     nextStep?: string;
     finalizedAt?: string;
+    source?: string;
   };
   interview_summary_count?: number;
   submitted_application?: {
@@ -112,12 +115,21 @@ function hasScheduledInterview(aiOutput: CandidateAiOutput) {
   return Boolean(aiOutput.hr_decision?.interview_date && aiOutput.hr_decision?.interview_time);
 }
 
+function isRealInterviewSummary(summary: CandidateAiOutput["interview_summary"]) {
+  return Boolean(
+    summary &&
+      (summary.source === "live_interview" ||
+        (summary.candidateTranscriptLineCount ?? 0) > 0 ||
+        (summary.meetingNoteCount ?? 0) > 0)
+  );
+}
+
 function completedInterviewCount(aiOutput: CandidateAiOutput) {
   if (typeof aiOutput.interview_summary_count === "number" && aiOutput.interview_summary_count > 0) {
     return aiOutput.interview_summary_count;
   }
 
-  return aiOutput.interview_summary ? 1 : 0;
+  return isRealInterviewSummary(aiOutput.interview_summary) ? 1 : 0;
 }
 
 function scheduleActionLabel(aiOutput: CandidateAiOutput) {
@@ -127,6 +139,7 @@ function scheduleActionLabel(aiOutput: CandidateAiOutput) {
 function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput, aiStatus?: string) {
   const scheduledInterview = scheduledInterviewLabel(aiOutput);
   const decision = aiOutput.hr_decision;
+  const interviewSummary = isRealInterviewSummary(aiOutput.interview_summary) ? aiOutput.interview_summary : null;
 
   if (decision?.outcome === "rejected") {
     return {
@@ -146,12 +159,12 @@ function processRecommendation(candidate: Candidate, aiOutput: CandidateAiOutput
     };
   }
 
-  if (aiOutput.interview_summary) {
+  if (interviewSummary) {
     return {
       label: "Interview completed",
-      title: aiOutput.interview_summary.headline ?? "Interview completed.",
-      body: aiOutput.interview_summary.summary ?? "The interview summary has been saved for this candidate.",
-      action: aiOutput.interview_summary.nextStep ?? "Review interview evidence and choose whether to schedule another interview, reject, or progress to a final decision.",
+      title: interviewSummary.headline ?? "Interview completed.",
+      body: interviewSummary.summary ?? "The interview summary has been saved for this candidate.",
+      action: interviewSummary.nextStep ?? "Review interview evidence and choose whether to schedule another interview, reject, or progress to a final decision.",
     };
   }
 
@@ -325,6 +338,8 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
   const matchedSkills = skillMatch.matched ?? [];
   const partialSkills = skillMatch.partial ?? [];
   const missingSkills = skillMatch.missing ?? [];
+  const scheduledInterview = scheduledInterviewLabel(aiOutput);
+  const interviewSummary = isRealInterviewSummary(aiOutput.interview_summary) ? aiOutput.interview_summary : null;
 
   return (
     <PageShell
@@ -340,21 +355,56 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
         </Link>
       }
       title={candidate.name}
-      description={`${candidate.currentRole} for ${job.title}. Review the AI summary, evidence, gaps, and interview prompts before moving to the next stage.`}
+      description={`Applied for ${job.title} at ${job.businessName}.`}
     >
       <div className="space-y-6">
-        {candidateIsSaved && !isFinal ? (
-          <div className="flex justify-end">
-            <Link
-              className="inline-flex w-fit items-center justify-center gap-2 rounded-full border border-ink/15 bg-white/75 px-3 py-2 text-sm font-black text-ink shadow-sm transition hover:border-ink/30 hover:bg-moss/20"
-              href={`/interview/${candidate.id}/live`}
-              title="Interview Room: Run the live interview workspace"
-            >
-              <Video className="h-4 w-4" />
-              Live interview
-            </Link>
+        <div className="-mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {email ? (
+              <a
+                className="inline-flex max-w-64 items-center gap-2 rounded-full border border-ink/15 bg-white/75 px-3 py-2 text-xs font-black text-ink shadow-sm transition hover:border-ink/30 hover:bg-moss/20"
+                href={`mailto:${email}`}
+              >
+                <Mail className="h-4 w-4 shrink-0" />
+                <span className="truncate">{email}</span>
+              </a>
+            ) : null}
+            {candidate.githubUrl ? (
+              <a
+                className="inline-flex items-center gap-2 rounded-full border border-ink/15 bg-white/75 px-3 py-2 text-xs font-black text-ink shadow-sm transition hover:border-ink/30 hover:bg-moss/20"
+                href={candidate.githubUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Github className="h-4 w-4" />
+                GitHub
+              </a>
+            ) : null}
+            {linkedinUrl ? (
+              <a
+                className="inline-flex items-center gap-2 rounded-full border border-ink/15 bg-white/75 px-3 py-2 text-xs font-black text-ink shadow-sm transition hover:border-ink/30 hover:bg-moss/20"
+                href={linkedinUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Linkedin className="h-4 w-4" />
+                LinkedIn
+              </a>
+            ) : null}
           </div>
-        ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {candidateIsSaved && !isFinal ? (
+              <Link
+                className="inline-flex w-fit items-center justify-center gap-2 rounded-full border border-ink/15 bg-white/75 px-3 py-2 text-sm font-black text-ink shadow-sm transition hover:border-ink/30 hover:bg-moss/20"
+                href={`/interview/${candidate.id}/live`}
+                title="Interview Room: Run the live interview workspace"
+              >
+                <Video className="h-4 w-4" />
+                Live interview
+              </Link>
+            ) : null}
+          </div>
+        </div>
 
         <Card className="overflow-hidden p-0">
           <div className="grid gap-6 p-6 lg:grid-cols-[1fr_520px] lg:items-center">
@@ -372,14 +422,9 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
 
             <div className="grid gap-3 md:grid-cols-[0.85fr_1fr]">
               <div className="rounded-2xl border border-ink/20 bg-ink p-4 text-paper shadow-panel">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-black uppercase text-paper/55">Current status</p>
-                    <p className="mt-2 text-2xl font-black leading-none">{pipelineStatusLabel(status, aiOutput)}</p>
-                  </div>
-                  <span className="inline-flex shrink-0 whitespace-nowrap rounded-full border border-paper/15 bg-paper/10 px-3 py-1 text-[11px] font-black text-paper/70">
-                    {aiStatusLabel(aiStatus, source)}
-                  </span>
+                <div>
+                  <p className="text-xs font-black uppercase text-paper/55">Current status</p>
+                  <p className="mt-2 text-2xl font-black leading-none">{pipelineStatusLabel(status, aiOutput)}</p>
                 </div>
                 {aiOutput.hr_decision?.note && !isRejected ? (
                   <p className="mt-4 text-sm leading-6 text-paper/75">{aiOutput.hr_decision.note}</p>
@@ -430,14 +475,12 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                       <form action={updateCandidateDecision}>
                         <input name="candidate_id" type="hidden" value={candidate.id} />
                         <input name="outcome" type="hidden" value="review" />
-                        <ActionSubmitButton pendingLabel="Updating..." variant="secondary">Keep reviewing</ActionSubmitButton>
+                        <ActionSubmitButton pendingLabel="Updating..." variant="secondary">
+                          {status === "interview" ? "Move back to review" : "Keep reviewing"}
+                        </ActionSubmitButton>
                       </form>
                       {status === "interview" ? (
-                        <ScheduleInterviewModal
-                          action={updateCandidateDecision}
-                          candidateId={candidate.id}
-                          label={scheduleActionLabel(aiOutput)}
-                        />
+                        <ScheduleInterviewModal action={updateCandidateDecision} candidateId={candidate.id} label={scheduledInterview ? "Reschedule" : "Schedule"} />
                       ) : (
                         <ScheduleInterviewModal
                           action={updateCandidateDecision}
@@ -609,21 +652,21 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
           </div>
 
           <div className="space-y-6">
-            {aiOutput.interview_summary ? (
+            {interviewSummary ? (
               <Card className="border-moss/25 bg-moss/10">
                 <p className="text-sm font-black text-ink">Interview summary</p>
                 <h2 className="mt-2 text-2xl font-black text-navy">
-                  {aiOutput.interview_summary.headline ?? "Interview completed"}
+                  {interviewSummary.headline ?? "Interview completed"}
                 </h2>
                 <p className="mt-4 text-sm leading-7 text-navy/75">
-                  {aiOutput.interview_summary.summary ?? "Interview summary has been saved."}
+                  {interviewSummary.summary ?? "Interview summary has been saved."}
                 </p>
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <div>
                     <p className="text-sm font-black text-ink">Strengths from interview</p>
                     <ul className="mt-2 space-y-2">
-                      {(aiOutput.interview_summary.strengths?.length
-                        ? aiOutput.interview_summary.strengths
+                      {(interviewSummary.strengths?.length
+                        ? interviewSummary.strengths
                         : ["No interview strengths saved yet."]
                       ).map((item) => (
                         <li key={item} className="rounded-lg border border-line bg-white p-3 text-sm leading-6 text-navy/75">
@@ -635,8 +678,8 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                   <div>
                     <p className="text-sm font-black text-ink">Concerns to validate</p>
                     <ul className="mt-2 space-y-2">
-                      {(aiOutput.interview_summary.concerns?.length
-                        ? aiOutput.interview_summary.concerns
+                      {(interviewSummary.concerns?.length
+                        ? interviewSummary.concerns
                         : ["No interview concerns saved yet."]
                       ).map((item) => (
                         <li key={item} className="rounded-lg border border-ink/15 bg-white/75 p-3 text-sm leading-6 text-navy/75">
@@ -705,58 +748,6 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
                 ))}
               </ul>
             </div>
-          </div>
-        </Card>
-
-        <Card>
-          <h2 className="text-xl font-black text-navy">Candidate links</h2>
-          <div className="mt-4">
-            {email || candidate.githubUrl || linkedinUrl ? (
-              <div className="grid gap-3 lg:grid-cols-3">
-                {email ? (
-                  <a
-                    className="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
-                    href={`mailto:${email}`}
-                  >
-                    <span className="inline-flex min-w-0 items-center gap-2">
-                      <Mail className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{email}</span>
-                    </span>
-                    <span>Email</span>
-                  </a>
-                ) : null}
-                {candidate.githubUrl ? (
-                  <a
-                    className="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
-                    href={candidate.githubUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Github className="h-4 w-4" />
-                      GitHub profile
-                    </span>
-                    <span>Open</span>
-                  </a>
-                ) : null}
-                {linkedinUrl ? (
-                  <a
-                    className="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink transition hover:border-ink/35 hover:bg-moss/15"
-                    href={linkedinUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Linkedin className="h-4 w-4" />
-                      LinkedIn profile
-                    </span>
-                    <span>Open</span>
-                  </a>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-sm text-navy/60">No public links added.</p>
-            )}
           </div>
         </Card>
 

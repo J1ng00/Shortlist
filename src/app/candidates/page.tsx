@@ -4,6 +4,7 @@ import { ArrowUpRight, BriefcaseBusiness, CalendarClock, Github, Linkedin, Searc
 import { PageShell } from "@/components/page-shell";
 import { ButtonLink, Card } from "@/components/ui";
 import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
+import { AutoSubmitSelect } from "@/components/candidates/auto-submit-select";
 import { ScheduleInterviewModal } from "@/components/candidates/schedule-interview-modal";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { analyzeCandidate, updateCandidateDecision } from "./[id]/actions";
@@ -45,12 +46,15 @@ type CandidateAiOutput = {
     interview_time?: string | null;
   };
   interview_summary?: {
+    candidateTranscriptLineCount?: number;
     headline?: string;
+    meetingNoteCount?: number;
     summary?: string;
     strengths?: string[];
     concerns?: string[];
     nextStep?: string;
     finalizedAt?: string;
+    source?: string;
   };
   interview_summary_count?: number;
   submitted_application?: {
@@ -181,11 +185,21 @@ function candidatePipelineLabel(row: CandidateRow) {
   return "Review";
 }
 
+function isRealInterviewSummary(summary: CandidateAiOutput["interview_summary"]) {
+  return Boolean(
+    summary &&
+      (summary.source === "live_interview" ||
+        (summary.candidateTranscriptLineCount ?? 0) > 0 ||
+        (summary.meetingNoteCount ?? 0) > 0)
+  );
+}
+
 function processRecommendation(row: CandidateRow) {
   const output = row.ai_candidate_output;
   const scheduledInterview = scheduledInterviewLabel(row);
   const score = candidateScore(row);
   const summary = output?.ai_summary || output?.submitted_application?.manual_profile_notes;
+  const interviewSummary = isRealInterviewSummary(output?.interview_summary) ? output?.interview_summary : null;
 
   if (output?.hr_decision?.outcome === "rejected") {
     return output.hr_decision.note ?? "Decision made: candidate has been rejected.";
@@ -195,10 +209,10 @@ function processRecommendation(row: CandidateRow) {
     return output.hr_decision.note ?? "Decision made: candidate is marked for hire.";
   }
 
-  if (output?.interview_summary) {
-    return output.interview_summary.nextStep
-      ? `Recommended action: ${output.interview_summary.nextStep}`
-      : "Recommended action: review the interview summary before making the final decision.";
+  if (interviewSummary) {
+    return interviewSummary.nextStep
+      ? `Interview complete. Recommended action: ${interviewSummary.nextStep}`
+      : "Interview complete. Review the interview summary before making the final decision.";
   }
 
   if (row.stage === "interview" || output?.hr_decision?.outcome === "next_stage") {
@@ -320,17 +334,18 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
               placeholder="Search name, role, skill, company, email..."
             />
           </label>
-          <select
+          <AutoSubmitSelect
             className="h-12 rounded-xl border border-line bg-white px-4 text-sm font-bold outline-none focus:border-ink"
             defaultValue={stage}
             name="stage"
-          >
-            <option value="all">All stages</option>
-            <option value="review">Review</option>
-            <option value="interview">Interview</option>
-            <option value="reject">Rejected</option>
-            <option value="hired">Hired</option>
-          </select>
+            options={[
+              { label: "All stages", value: "all" },
+              { label: "Review", value: "review" },
+              { label: "Interview", value: "interview" },
+              { label: "Rejected", value: "reject" },
+              { label: "Hired", value: "hired" }
+            ]}
+          />
           <button
             aria-label="Search candidates"
             className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-paper transition hover:bg-navy"
@@ -346,7 +361,9 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
           filtered.map((row) => {
             const job = normalizeJob(row);
             const status = candidateStatus(row);
-            const interviewSummary = row.ai_candidate_output?.interview_summary;
+            const interviewSummary = isRealInterviewSummary(row.ai_candidate_output?.interview_summary)
+              ? row.ai_candidate_output?.interview_summary
+              : null;
             const scheduledInterview = scheduledInterviewLabel(row);
             const currentRecommendation = processRecommendation(row);
             const statusLabel = displayStatus(row);

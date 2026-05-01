@@ -53,6 +53,24 @@ const maxSegmentMs = 15000;
 const minSegmentMs = 600;
 const voiceStartThreshold = 0.035;
 const voiceStopThreshold = 0.02;
+const apiHeaders = {
+  "ngrok-skip-browser-warning": "true"
+};
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const responseText = await response.text();
+
+  try {
+    return responseText ? (JSON.parse(responseText) as T) : ({} as T);
+  } catch {
+    const preview = responseText.trim().slice(0, 120);
+    throw new Error(
+      preview.startsWith("<!DOCTYPE")
+        ? "API returned an HTML page instead of JSON. If this is the candidate ngrok link, the ngrok warning or a server error page is blocking the API request."
+        : `API returned invalid JSON: ${preview || "empty response"}`
+    );
+  }
+}
 
 function parseTranscriptNotes(notes: string, speakerFilter?: "Manager" | "Candidate"): TranscriptLine[] {
   return notes
@@ -231,10 +249,11 @@ export function LiveInterviewConsole({
     try {
       const response = await fetch("/api/interview/transcribe", {
         method: "POST",
+        headers: apiHeaders,
         body: formData
       });
 
-      const payload = (await response.json()) as { error?: string; text?: string };
+      const payload = await readJsonResponse<{ error?: string; text?: string }>(response);
 
       if (!response.ok) {
         throw new Error(payload.error ?? "Transcription failed.");
@@ -443,13 +462,14 @@ export function LiveInterviewConsole({
 
     async function refreshNotes() {
       try {
-        const response = await fetch(`/api/interview/session-notes?sessionId=${latestSessionId}`);
+        const response = await fetch(`/api/interview/session-notes?sessionId=${latestSessionId}`, {
+          headers: apiHeaders
+        });
+        const payload = await readJsonResponse<{ notes?: string }>(response);
 
         if (!response.ok) {
           return;
         }
-
-        const payload = (await response.json()) as { notes?: string };
         const notes = payload.notes ?? "";
 
         if (isActive) {
@@ -503,6 +523,7 @@ export function LiveInterviewConsole({
       const response = await fetch("/api/interview/live-suggestions", {
         method: "POST",
         headers: {
+          ...apiHeaders,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -510,10 +531,10 @@ export function LiveInterviewConsole({
           sessionId: latestSessionId
         })
       });
-      const payload = (await response.json()) as {
+      const payload = await readJsonResponse<{
         data?: LiveSuggestions;
         error?: string;
-      };
+      }>(response);
 
       if (!response.ok) {
         throw new Error(payload.error ?? "Unable to generate live suggestions.");
@@ -557,6 +578,7 @@ export function LiveInterviewConsole({
       const response = await fetch("/api/interview/live-notes", {
         method: "POST",
         headers: {
+          ...apiHeaders,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -564,7 +586,7 @@ export function LiveInterviewConsole({
           sessionId: latestSessionId
         })
       });
-      const payload = (await response.json()) as { data?: LiveSuggestions; error?: string };
+      const payload = await readJsonResponse<{ data?: LiveSuggestions; error?: string }>(response);
 
       if (!response.ok) {
         throw new Error(payload.error ?? "Unable to save meeting note.");

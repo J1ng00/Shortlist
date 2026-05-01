@@ -85,7 +85,7 @@ export function AskAiModal({ candidateId, candidateName }: AskAiModalProps) {
     <>
       <button
         aria-label="Ask AI about this candidate"
-        className="fixed bottom-5 right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-ink text-paper shadow-strong transition hover:-translate-y-0.5 hover:bg-navy"
+        className="fixed bottom-5 right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-clay/70 bg-ink text-paper shadow-strong ring-4 ring-clay/20 transition hover:-translate-y-0.5 hover:border-clay hover:bg-navy hover:ring-clay/35"
         onClick={() => setIsOpen(true)}
         type="button"
       >

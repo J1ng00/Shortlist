@@ -66,7 +66,7 @@ const flow = [
     icon: ClipboardList,
   },
   {
-    title: "view candidate list",
+    title: "View candidate list",
     description: "Search applicants, review statuses, and open candidate summaries.",
     href: "/candidates",
     icon: FileText,
