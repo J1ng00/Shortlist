@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { type ChangeEvent, type FocusEvent, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -12,6 +12,14 @@ import { createJob, updateJob } from "./actions";
 
 function toText(items: string[]) {
   return items.join("\n");
+}
+
+function hostLabel(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 function initialOutput(job: Job): JobGenerationOutput {
@@ -76,6 +84,22 @@ function SubmitButton({ disabled, formId, mode }: { disabled: boolean; formId?: 
 
 type DraftResponse = {
   data: JobProfileDraft;
+  company_context?: {
+    name: string;
+    url: string;
+    scraped_urls: string[];
+  } | null;
+};
+
+type CompanyMatch = {
+  name: string;
+  url: string;
+  description: string;
+  source: string;
+};
+
+type CompanyLookupResponse = {
+  matches: CompanyMatch[];
 };
 
 type DraftFieldName = "company_values" | "must_have_skills" | "nice_to_have_skills" | "interview_focus";
@@ -170,6 +194,7 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
   const niceToHaveSkillsRef = useRef<HTMLTextAreaElement>(null);
   const interviewFocusRef = useRef<HTMLTextAreaElement>(null);
   const lastDraftSignatureRef = useRef("");
+  const lastCompanyLookupSignatureRef = useRef("");
   const lastDraftValuesRef = useRef<Record<DraftFieldName, string> | null>(null);
   const initialSignature = useMemo(() => jobSignature(job), [job]);
   const [output, setOutput] = useState<JobGenerationOutput>(() => initialOutput(job));
@@ -177,6 +202,10 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
   const [roleTitle, setRoleTitle] = useState(job.title);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [draftError, setDraftError] = useState("");
+  const [draftNotice, setDraftNotice] = useState("");
+  const [companyMatches, setCompanyMatches] = useState<CompanyMatch[]>([]);
+  const [confirmedCompany, setConfirmedCompany] = useState<CompanyMatch | null>(null);
+  const [companyResearchSource, setCompanyResearchSource] = useState("");
   const [isDirty, setIsDirty] = useState(mode === "create");
   const formAction = mode === "edit" ? updateJob : createJob;
   const saveDisabled = mode === "edit" && !isDirty;
@@ -190,33 +219,37 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
     []
   );
 
-  async function generateDraftIfReady() {
-    if (mode !== "create") {
-      return;
-    }
-
-    const currentFormData = formRef.current ? new FormData(formRef.current) : null;
-    const business = String(currentFormData?.get("business_name") ?? businessName).trim();
-    const role = String(currentFormData?.get("role_title") ?? roleTitle).trim();
-
-    if (!business || !role) {
-      return;
-    }
-
-    const signature = JSON.stringify([business, role]);
-
-    if (signature === lastDraftSignatureRef.current) {
-      return;
-    }
-
+  function canApplyGeneratedDraft() {
     const lastDraftValues = lastDraftValuesRef.current;
-    const canApplyDraft = (Object.entries(draftFieldRefs) as Array<[DraftFieldName, typeof companyValuesRef]>).every(([name, ref]) => {
+
+    return (Object.entries(draftFieldRefs) as Array<[DraftFieldName, typeof companyValuesRef]>).every(([name, ref]) => {
       const currentValue = ref.current?.value.trim() ?? "";
 
       return !currentValue || currentValue === lastDraftValues?.[name];
     });
+  }
 
-    if (!canApplyDraft) {
+  function currentDraftInput() {
+    const currentFormData = formRef.current ? new FormData(formRef.current) : null;
+
+    return {
+      business: String(currentFormData?.get("business_name") ?? businessName).trim(),
+      role: String(currentFormData?.get("role_title") ?? roleTitle).trim(),
+      location: String(currentFormData?.get("location") ?? ""),
+      workType: String(currentFormData?.get("work_type") ?? "")
+    };
+  }
+
+  async function applyGeneratedDraft(company: CompanyMatch | null) {
+    const { business, role, location, workType } = currentDraftInput();
+
+    if (!business || !role || !canApplyGeneratedDraft()) {
+      return;
+    }
+
+    const signature = JSON.stringify([business, role, location, workType, company?.url ?? "generic"]);
+
+    if (signature === lastDraftSignatureRef.current) {
       return;
     }
 
@@ -230,10 +263,12 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          mode: "generate",
           business_name: business,
           role_title: role,
-          location: String(currentFormData?.get("location") ?? ""),
-          work_type: String(currentFormData?.get("work_type") ?? "")
+          location,
+          work_type: workType,
+          selected_company: company
         })
       });
 
@@ -257,6 +292,10 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
 
       lastDraftValuesRef.current = nextValues;
       lastDraftSignatureRef.current = signature;
+      setCompanyMatches([]);
+      setConfirmedCompany(payload.company_context ? company : null);
+      setCompanyResearchSource(payload.company_context?.url ?? "");
+      setDraftNotice(company && !payload.company_context ? "Could not read enough company information, so this draft was generated normally." : "");
       setOutput({
         ...payload.data.job_output,
         evaluation_rubric: normalizeRubricWeights(payload.data.job_output.evaluation_rubric)
@@ -264,6 +303,67 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
       setIsDirty(true);
     } catch {
       setDraftError("Automatic draft failed. You can still fill the profile manually.");
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  }
+
+  async function generateDraftIfReady() {
+    if (mode !== "create") {
+      return;
+    }
+
+    const { business, role, location, workType } = currentDraftInput();
+
+    if (!business || !role) {
+      return;
+    }
+
+    const signature = JSON.stringify([business, role, location, workType]);
+
+    if (signature === lastCompanyLookupSignatureRef.current || signature === lastDraftSignatureRef.current) {
+      return;
+    }
+
+    if (!canApplyGeneratedDraft()) {
+      return;
+    }
+
+    try {
+      setIsGeneratingDraft(true);
+      setDraftError("");
+      setDraftNotice("");
+      setCompanyResearchSource("");
+
+      const response = await fetch("/api/jobs/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          mode: "lookup",
+          business_name: business,
+          role_title: role,
+          location,
+          work_type: workType
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not look up the company.");
+      }
+
+      const payload = (await response.json()) as CompanyLookupResponse;
+      lastCompanyLookupSignatureRef.current = signature;
+
+      if (payload.matches.length) {
+        setCompanyMatches(payload.matches);
+        return;
+      }
+
+      await applyGeneratedDraft(null);
+    } catch {
+      await applyGeneratedDraft(null);
     } finally {
       setIsGeneratingDraft(false);
     }
@@ -287,7 +387,23 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
     const target = event.target;
 
     if (!(target instanceof HTMLInputElement)) {
+      if (target instanceof HTMLSelectElement && target.name === "work_type") {
+        setCompanyMatches([]);
+        setConfirmedCompany(null);
+        setCompanyResearchSource("");
+        setDraftNotice("");
+        lastCompanyLookupSignatureRef.current = "";
+      }
+
       return;
+    }
+
+    if (["business_name", "role_title", "location"].includes(target.name)) {
+      setCompanyMatches([]);
+      setConfirmedCompany(null);
+      setCompanyResearchSource("");
+      setDraftNotice("");
+      lastCompanyLookupSignatureRef.current = "";
     }
 
     if (target.name === "business_name") {
@@ -310,9 +426,14 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
 
     lastDraftValuesRef.current = null;
     lastDraftSignatureRef.current = "";
+    lastCompanyLookupSignatureRef.current = "";
     setBusinessName("");
     setRoleTitle("");
     setDraftError("");
+    setDraftNotice("");
+    setCompanyMatches([]);
+    setConfirmedCompany(null);
+    setCompanyResearchSource("");
     setOutput({
       job_description: "",
       evaluation_rubric: [],
@@ -418,6 +539,53 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
                 Role title
                 <input disabled={isGeneratingDraft} name="role_title" className="rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal outline-none focus:border-clay disabled:opacity-60" defaultValue={job.title} onBlur={handleDraftFieldBlur} />
               </label>
+              {companyMatches.length ? (
+                <div className="rounded-2xl border border-ink/10 bg-white/75 p-4">
+                  <div className="flex items-start gap-3">
+                    <Search className="mt-0.5 h-4 w-4 shrink-0 text-ink/60" />
+                    <div>
+                      <p className="text-sm font-black">Confirm the company</p>
+                      <p className="mt-1 text-sm font-normal leading-6 text-ink/65">
+                        Choose the matching company so the AI draft can use real company information.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3">
+                    {companyMatches.map((match) => (
+                      <button
+                        key={match.url}
+                        className="rounded-2xl border border-ink/10 bg-paper p-3 text-left transition hover:border-ink/30 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isGeneratingDraft}
+                        type="button"
+                        onClick={() => applyGeneratedDraft(match)}
+                      >
+                        <span className="flex items-start justify-between gap-3">
+                          <span>
+                            <span className="block text-sm font-black text-ink">{match.name}</span>
+                            <span className="mt-1 block text-xs font-bold text-ink/50">{match.source}</span>
+                          </span>
+                          <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-ink/45" />
+                        </span>
+                        {match.description ? <span className="mt-2 block text-sm font-normal leading-6 text-ink/65">{match.description}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="mt-3 inline-flex items-center justify-center rounded-full border border-ink/20 bg-white px-4 py-2 text-sm font-bold text-ink transition hover:border-ink/40 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isGeneratingDraft}
+                    type="button"
+                    onClick={() => applyGeneratedDraft(null)}
+                  >
+                    Generate without a company match
+                  </button>
+                </div>
+              ) : null}
+              {confirmedCompany ? (
+                <p className="rounded-2xl bg-white/70 p-3 text-sm font-bold text-ink/65">
+                  Draft based on {confirmedCompany.name}
+                  {companyResearchSource ? ` (${hostLabel(companyResearchSource)})` : ""}.
+                </p>
+              ) : null}
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="grid gap-2 text-sm font-bold">
                   Location
@@ -468,6 +636,7 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
                 <textarea disabled={isGeneratingDraft} ref={interviewFocusRef} name="interview_focus" className="min-h-32 rounded-2xl border border-ink/10 bg-white/70 p-3 font-normal leading-6 outline-none focus:border-clay disabled:opacity-60" defaultValue={toText(job.interviewFocus)} />
               </label>
               {draftError ? <p className="text-sm font-bold text-red-700">{draftError}</p> : null}
+              {draftNotice ? <p className="text-sm font-bold text-ink/60">{draftNotice}</p> : null}
             </fieldset>
           </form>
         </Card>
@@ -581,7 +750,7 @@ export function JobProfileForm({ job, mode = "create" }: { job: Job; mode?: "cre
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-paper/80 p-6 backdrop-blur-sm">
               <div className="w-full max-w-xs rounded-2xl border border-ink/10 bg-white p-5 text-center shadow-panel">
                 <Loader2 className="mx-auto h-6 w-6 animate-spin text-ink" />
-                <p className="mt-3 text-sm font-black text-navy">Generating rubric</p>
+                <p className="mt-3 text-sm font-black text-navy">Preparing draft</p>
               </div>
             </div>
           ) : null}

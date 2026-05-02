@@ -1,4 +1,5 @@
 import { jobGenerationContract, jobProfileDraftContract } from "@/lib/ai-json-contracts";
+import type { CompanyResearchContext } from "@/lib/company-research";
 
 export type JobGenerationInput = {
   business_name: string;
@@ -27,6 +28,10 @@ export type JobProfileDraft = {
   nice_to_have_skills: string[];
   interview_focus: string[];
   job_output: JobGenerationOutput;
+};
+
+type JobProfileDraftInput = Pick<JobGenerationInput, "business_name" | "role_title" | "location" | "work_type"> & {
+  company_context?: CompanyResearchContext | null;
 };
 
 export function linesFromValue(value: FormDataEntryValue | null) {
@@ -144,8 +149,19 @@ export async function generateJobKit(input: JobGenerationInput): Promise<JobGene
   return fallbackJobKit(input);
 }
 
-export async function generateJobProfileDraft(input: Pick<JobGenerationInput, "business_name" | "role_title" | "location" | "work_type">): Promise<JobProfileDraft> {
+export async function generateJobProfileDraft(input: JobProfileDraftInput): Promise<JobProfileDraft> {
   const apiKey = process.env.OPENAI_API_KEY;
+  const companyContext = input.company_context?.scrapedText
+    ? {
+        selected_company: {
+          name: input.company_context.name,
+          url: input.company_context.url,
+          description: input.company_context.description,
+          scraped_urls: input.company_context.scrapedUrls
+        },
+        scraped_company_information: input.company_context.scrapedText
+      }
+    : null;
 
   if (!apiKey) {
     return fallbackJobProfileDraft(input);
@@ -173,9 +189,17 @@ export async function generateJobProfileDraft(input: Pick<JobGenerationInput, "b
               role: "user",
               content: JSON.stringify({
                 task:
-                  "Given a business name and role title, infer a sensible first draft for company values, must-have skills, nice-to-have skills, interview focus, and a job kit. Keep each list specific and short.",
+                  companyContext
+                    ? "Given a confirmed company, scraped company information, business name, and role title, draft company-grounded hiring inputs. Company values, must-have skills, nice-to-have skills, interview focus, and the job kit must be based on the scraped company information where it contains relevant evidence. If a detail is not present in the scraped information, infer conservatively from the role and clearly keep it practical rather than inventing specific company claims. Keep each list specific and short."
+                    : "Given a business name and role title, infer a sensible first draft for company values, must-have skills, nice-to-have skills, interview focus, and a job kit. Keep each list specific and short.",
                 contract: jobProfileDraftContract,
-                input
+                input: {
+                  business_name: input.business_name,
+                  role_title: input.role_title,
+                  location: input.location,
+                  work_type: input.work_type,
+                  company_context: companyContext
+                }
               })
             }
           ]
