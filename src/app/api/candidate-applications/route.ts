@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { after, NextResponse } from "next/server";
 
-import { analyzeCandidateById } from "@/lib/candidate-analysis";
 import { extractPdfText } from "@/lib/pdf/extract-text";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -89,6 +88,8 @@ export async function POST(request: Request) {
 
     after(async () => {
       try {
+        const { analyzeCandidateById } = await import("@/lib/candidate-analysis");
+
         await analyzeCandidateById(supabase, candidateId);
       } catch (analysisError) {
         await supabase
