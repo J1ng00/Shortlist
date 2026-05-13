@@ -1,6 +1,6 @@
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
+import { getOpenAIClient } from "@/lib/ai/openai-client";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 type RouteContext = {
@@ -11,10 +11,6 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
 };
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
 
 function isChatMessage(value: unknown): value is ChatMessage {
   if (!value || typeof value !== "object") {
@@ -91,6 +87,8 @@ export async function POST(request: Request, context: RouteContext) {
     .join("\n\n");
 
   try {
+    const openai = getOpenAIClient();
+
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL ?? "gpt-5.4",
       input: [

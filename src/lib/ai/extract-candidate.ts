@@ -1,9 +1,5 @@
-import OpenAI from "openai";
 import { candidateExtractionSchema } from "./candidate-schema";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+import { getOpenAIClient } from "./openai-client";
 
 export async function extractCandidateProfile(args: {
   resumeText: string;
@@ -14,6 +10,8 @@ export async function extractCandidateProfile(args: {
   jobTitle: string;
   companyName: string;
 }) {
+  const openai = getOpenAIClient();
+
   const response = await openai.responses.create({
     model: process.env.OPENAI_MODEL ?? "gpt-5.4",
     input: [

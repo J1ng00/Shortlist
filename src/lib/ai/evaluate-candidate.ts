@@ -1,9 +1,5 @@
-import OpenAI from "openai";
 import { candidateEvaluationSchema } from "./candidate-schema";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+import { getOpenAIClient } from "./openai-client";
 
 export async function evaluateCandidate(args: {
   job: {
@@ -15,6 +11,8 @@ export async function evaluateCandidate(args: {
   extractedProfile: unknown;
   evidenceContext?: unknown;
 }) {
+  const openai = getOpenAIClient();
+
   const response = await openai.responses.create({
     model: process.env.OPENAI_MODEL ?? "gpt-5.4",
     input: [
