@@ -20,6 +20,7 @@ export function AppTopbar() {
                 key={item.label}
                 className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-navy/75 transition hover:bg-clay/50 hover:text-ink"
                 href={item.href}
+                prefetch
               >
                 <item.icon className="h-5 w-5" />
                 {item.label}

@@ -34,6 +34,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             <Link
               key={item.label}
               href={item.href}
+              prefetch
               aria-label={item.label}
               title={collapsed ? item.label : undefined}
               className={`flex items-center rounded-xl py-3 text-sm font-bold text-paper/75 transition duration-200 hover:bg-paper/12 hover:text-paper motion-safe:hover:translate-x-0.5 ${
@@ -54,6 +55,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             collapsed ? "justify-center px-0" : "gap-3 px-3"
           }`}
           href={supportItem.href}
+          prefetch
           title={collapsed ? supportItem.label : undefined}
         >
           <supportItem.icon className="h-5 w-5" />

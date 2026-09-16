@@ -83,7 +83,14 @@ supabase/
 
 ```
 npm install
-npm run dev
+npm run dev:turbo
+```
+
+Use `npm run dev` if Turbopack causes a local tooling issue. To test production navigation speed locally, run:
+
+```
+npm run build
+npm run start
 ```
 
 **Environment Variables**
