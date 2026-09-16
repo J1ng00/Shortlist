@@ -2,12 +2,14 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Github, Linkedin, Mail, Message
 import Link from "next/link";
 
 import { PageShell } from "@/components/page-shell";
+import { SupabaseErrorCard } from "@/components/supabase-error-card";
 import { Card } from "@/components/ui";
 import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
 import { AskAiModal } from "@/components/candidates/ask-ai-modal";
 import { ScheduleInterviewModal } from "@/components/candidates/schedule-interview-modal";
 import { getCandidate, getJob } from "@/lib/mock-data";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import type { Candidate, Job } from "@/lib/types";
 import { analyzeCandidate, updateCandidateDecision } from "./actions";
 
@@ -276,19 +278,8 @@ function pipelineStatusLabel(status: CandidateStatus, aiOutput: CandidateAiOutpu
   return statusLabel(status);
 }
 
-function aiStatusLabel(aiStatus: string | undefined, source: "supabase" | "mock") {
-  if (aiStatus === "ready" || source === "mock") {
-    return "AI analyzed";
-  }
-
-  if (aiStatus === "failed") {
-    return "AI failed";
-  }
-
-  return aiStatus ?? "Awaiting AI";
-}
-
 async function getCandidateView(id: string): Promise<{ candidate: Candidate; job: Job; aiOutput: CandidateAiOutput; aiStatus?: string; email?: string | null; linkedinUrl?: string | null; source: "supabase" | "mock" }> {
+  const supabaseAdmin = createSupabaseAdminClient();
   const { data } = await supabaseAdmin
     .from("candidates")
     .select("*, jobs(*)")
@@ -358,7 +349,22 @@ async function getCandidateView(id: string): Promise<{ candidate: Candidate; job
 
 export default async function CandidatePage({ params }: CandidatePageProps) {
   const { id } = await params;
-  const { candidate, job, aiOutput, aiStatus, email, linkedinUrl, source } = await getCandidateView(id);
+  let view: Awaited<ReturnType<typeof getCandidateView>>;
+
+  try {
+    view = await getCandidateView(id);
+  } catch (error) {
+    const message = getSupabaseErrorMessage(error);
+    console.error("Candidate page failed to load candidate:", error);
+
+    return (
+      <PageShell eyebrow="Candidate profile" title="Could not load candidate" description="Candidate profiles need Supabase data before they can open.">
+        <SupabaseErrorCard message={message} />
+      </PageShell>
+    );
+  }
+
+  const { candidate, job, aiOutput, aiStatus, email, linkedinUrl, source } = view;
 
   const recommendationLabel = candidate.fitScore >= 80 ? "Strong fit" : candidate.fitScore >= 60 ? "Potential fit" : "Needs review";
   const currentRecommendation = processRecommendation(candidate, aiOutput, aiStatus);

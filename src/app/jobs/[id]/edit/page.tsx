@@ -3,7 +3,9 @@ import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { PageShell } from "@/components/page-shell";
+import { SupabaseErrorCard } from "@/components/supabase-error-card";
 import type { JobGenerationOutput } from "@/lib/job-ai";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Job } from "@/lib/types";
 import { JobProfileForm } from "../../new/job-profile-form";
@@ -25,16 +27,38 @@ export const dynamic = "force-dynamic";
 
 export default async function EditJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from("jobs")
-    .select(
-      "id, role_title, business_name, location, work_type, company_values, must_have_skills, nice_to_have_skills, interview_focus, ai_job_output"
-    )
-    .eq("id", id)
-    .single();
+  let data: unknown = null;
+  let loadError: string | null = null;
 
-  if (error || !data) {
+  try {
+    const supabase = createServerSupabaseClient();
+    const result = await supabase
+      .from("jobs")
+      .select(
+        "id, role_title, business_name, location, work_type, company_values, must_have_skills, nice_to_have_skills, interview_focus, ai_job_output"
+      )
+      .eq("id", id)
+      .single();
+
+    if (result.error) {
+      loadError = result.error.message;
+    } else {
+      data = result.data;
+    }
+  } catch (error) {
+    loadError = getSupabaseErrorMessage(error);
+    console.error("Edit job page failed to load job:", error);
+  }
+
+  if (loadError) {
+    return (
+      <PageShell eyebrow="Edit job" title="Could not load job" description="The job editor needs Supabase data before it can open.">
+        <SupabaseErrorCard message={loadError} />
+      </PageShell>
+    );
+  }
+
+  if (!data) {
     notFound();
   }
 

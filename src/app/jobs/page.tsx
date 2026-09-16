@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ClipboardList, MapPin, Pencil, Plus, Search, UserPlus } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
+import { SupabaseErrorCard } from "@/components/supabase-error-card";
 import { ButtonLink, Card, Pill } from "@/components/ui";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { normalizeWorkType, workTypeOptions } from "@/lib/work-types";
 import { DeleteJobButton } from "./delete-job-button";
@@ -62,17 +64,27 @@ export const dynamic = "force-dynamic";
 
 export default async function JobsPage({ searchParams }: JobsPageProps) {
   const { q = "", workType = "all" } = await searchParams;
-  const supabase = createServerSupabaseClient();
-  const { data: jobs, error } = await supabase
-    .from("jobs")
-    .select("id, role_title, business_name, location, work_type, must_have_skills, ai_job_output, created_at")
-    .order("created_at", { ascending: false });
+  let jobs: SavedJob[] = [];
+  let jobsError: string | null = null;
 
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const supabase = createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("id, role_title, business_name, location, work_type, must_have_skills, ai_job_output, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      jobsError = error.message;
+    } else {
+      jobs = (data ?? []) as SavedJob[];
+    }
+  } catch (error) {
+    jobsError = getSupabaseErrorMessage(error);
+    console.error("Jobs page failed to load jobs:", error);
   }
 
-  const savedJobs = (jobs ?? []) as SavedJob[];
+  const savedJobs = jobs;
   const filteredJobs = savedJobs.filter((job) => {
     const normalizedWorkType = normalizeWorkType(job.work_type);
     const workTypeMatch = workType === "all" || normalizedWorkType === workType;
@@ -122,7 +134,9 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
         </form>
       </Card>
 
-      {filteredJobs.length ? (
+      {jobsError ? (
+        <SupabaseErrorCard message={jobsError} />
+      ) : filteredJobs.length ? (
         <div className="grid gap-5">
           {filteredJobs.map((job) => {
             const summary = job.ai_job_output?.job_description;

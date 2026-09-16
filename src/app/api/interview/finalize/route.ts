@@ -68,6 +68,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "candidateId and sessionId are required." }, { status: 400 });
   }
 
+  try {
   const supabase = createServerSupabaseClient();
   const [{ data: session, error: sessionError }, { data: candidate, error: candidateError }] = await Promise.all([
     supabase
@@ -184,4 +185,10 @@ export async function POST(request: Request) {
   }
 
   return Response.json({ data: finalOutput });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Unable to finalize interview." },
+      { status: 500 }
+    );
+  }
 }

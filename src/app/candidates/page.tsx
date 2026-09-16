@@ -2,10 +2,12 @@ import Link from "next/link";
 import { ArrowUpRight, BriefcaseBusiness, CalendarClock, Github, Linkedin, Search, Sparkles, UserRound } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
+import { SupabaseErrorCard } from "@/components/supabase-error-card";
 import { ButtonLink, Card } from "@/components/ui";
 import { ActionSubmitButton } from "@/components/candidates/action-submit-button";
 import { AutoSubmitSelect } from "@/components/candidates/auto-submit-select";
 import { ScheduleInterviewModal } from "@/components/candidates/schedule-interview-modal";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { analyzeCandidate, updateCandidateDecision } from "./[id]/actions";
 
@@ -281,14 +283,24 @@ export const dynamic = "force-dynamic";
 
 export default async function CandidatesPage({ searchParams }: CandidatesPageProps) {
   const { q = "", stage = "all" } = await searchParams;
-  const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from("candidates")
-    .select("id, full_name, email, phone, current_position, github_url, resume_text, ai_candidate_output, initial_fit_score, stage, created_at, jobs(id, role_title, business_name, location)")
-    .order("created_at", { ascending: false });
+  let data: unknown[] = [];
+  let loadError: string | null = null;
 
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const supabase = createServerSupabaseClient();
+    const result = await supabase
+      .from("candidates")
+      .select("id, full_name, email, phone, current_position, github_url, resume_text, ai_candidate_output, initial_fit_score, stage, created_at, jobs(id, role_title, business_name, location)")
+      .order("created_at", { ascending: false });
+
+    if (result.error) {
+      loadError = result.error.message;
+    } else {
+      data = result.data ?? [];
+    }
+  } catch (error) {
+    loadError = getSupabaseErrorMessage(error);
+    console.error("Candidates page failed to load candidates:", error);
   }
 
   const rows = (data ?? []) as unknown as CandidateRow[];
@@ -308,6 +320,8 @@ export default async function CandidatesPage({ searchParams }: CandidatesPagePro
         <ButtonLink href="/candidates/new" variant="secondary">Add internally</ButtonLink>
       }
     >
+      {loadError ? <SupabaseErrorCard message={loadError} /> : null}
+
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="rounded-2xl">
           <p className="text-sm font-bold text-navy/60">Total candidates</p>

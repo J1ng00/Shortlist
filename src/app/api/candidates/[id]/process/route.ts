@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { extractPdfText } from "@/lib/pdf/extract-text";
 import { extractCandidateProfile } from "@/lib/ai/extract-candidate";
 import { evaluateCandidate } from "@/lib/ai/evaluate-candidate";
@@ -12,16 +12,38 @@ type RouteContext = {
 
 export async function POST(_: Request, context: RouteContext) {
   const { id } = await context.params;
+  let supabaseAdmin: ReturnType<typeof createSupabaseAdminClient>;
 
-  const { data: candidate, error: candidateError } = await supabaseAdmin
-    .from("candidates")
-    .select("*, jobs(*)")
-    .eq("id", id)
-    .single();
-
-  if (candidateError || !candidate) {
-    return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+  try {
+    supabaseAdmin = createSupabaseAdminClient();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to connect to Supabase." },
+      { status: 500 }
+    );
   }
+
+  let candidate;
+
+  try {
+    const result = await supabaseAdmin
+      .from("candidates")
+      .select("*, jobs(*)")
+      .eq("id", id)
+      .single();
+
+    if (result.error || !result.data) {
+      return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+    }
+
+    candidate = result.data;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to load candidate." },
+      { status: 500 }
+    );
+  }
+
 
   const existingAiOutput = candidate.ai_candidate_output ?? {};
 

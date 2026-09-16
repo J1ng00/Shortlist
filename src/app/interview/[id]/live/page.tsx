@@ -3,7 +3,9 @@ import { ChevronLeft } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
 import { LiveInterviewConsole } from "@/components/live-interview-console";
+import { SupabaseErrorCard } from "@/components/supabase-error-card";
 import { ButtonLink, Card } from "@/components/ui";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type LiveInterviewPageProps = {
@@ -154,12 +156,75 @@ export default async function LiveInterviewPage({ params, searchParams }: LiveIn
   const { id } = await params;
   const { role } = await searchParams;
   const participantRole = role?.toLowerCase() === "candidate" ? "candidate" : "manager";
-  const supabase = createServerSupabaseClient();
-  const { data: candidate } = await supabase
-    .from("candidates")
-    .select("id, full_name, current_position, ai_candidate_output, job_id, jobs(role_title, business_name)")
-    .eq("id", id)
-    .maybeSingle();
+  let candidate: unknown = null;
+  let latestSession: InterviewSessionRow | null = null;
+  let loadError: string | null = null;
+
+  try {
+    const supabase = createServerSupabaseClient();
+    const candidateResult = await supabase
+      .from("candidates")
+      .select("id, full_name, current_position, ai_candidate_output, job_id, jobs(role_title, business_name)")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (candidateResult.error) {
+      loadError = candidateResult.error.message;
+    } else {
+      candidate = candidateResult.data;
+    }
+
+    if (candidate && !loadError) {
+      const sessionResult = await supabase
+        .from("interview_sessions")
+        .select("id, created_at, notes, ai_interview_output")
+        .eq("candidate_id", id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sessionResult.error) {
+        loadError = sessionResult.error.message;
+      } else {
+        latestSession = sessionResult.data as InterviewSessionRow | null;
+      }
+
+      if (!latestSession && !loadError) {
+        const newSessionResult = await supabase
+          .from("interview_sessions")
+          .insert({
+            candidate_id: (candidate as CandidateRow).id,
+            notes: "",
+            ai_interview_output: {},
+            final_decision_output: {}
+          })
+          .select("id, created_at, notes, ai_interview_output")
+          .single();
+
+        if (newSessionResult.error) {
+          loadError = newSessionResult.error.message;
+        } else {
+          latestSession = newSessionResult.data as InterviewSessionRow | null;
+        }
+      }
+    }
+  } catch (error) {
+    loadError = getSupabaseErrorMessage(error);
+    console.error("Live interview page failed to load interview data:", error);
+  }
+
+  if (loadError) {
+    return (
+      <PageShell
+        eyebrow="Live interview"
+        title="Could not load interview room"
+        description="The live interview room needs Supabase data before it can open."
+        actions={<ButtonLink href={`/candidates/${id}`}>Back to scorecard</ButtonLink>}
+      >
+        <SupabaseErrorCard message={loadError} />
+      </PageShell>
+    );
+  }
 
   if (!candidate) {
     return (
@@ -193,29 +258,6 @@ export default async function LiveInterviewPage({ params, searchParams }: LiveIn
     .filter((item): item is string => Boolean(item))
     .join(" · ");
   const roomName = `interview-${candidateRow.id}`;
-  const { data: session } = await supabase
-    .from("interview_sessions")
-    .select("id, created_at, notes, ai_interview_output")
-    .eq("candidate_id", id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  let latestSession = session as InterviewSessionRow | null;
-
-  if (!latestSession) {
-    const { data: newSession } = await supabase
-      .from("interview_sessions")
-      .insert({
-        candidate_id: candidateRow.id,
-        notes: "",
-        ai_interview_output: {},
-        final_decision_output: {}
-      })
-      .select("id, created_at, notes, ai_interview_output")
-      .single();
-
-    latestSession = newSession as InterviewSessionRow | null;
-  }
   const initialFollowUpQuestions = getInitialFollowUpQuestions(
     latestSession?.ai_interview_output,
     candidateRow.ai_candidate_output

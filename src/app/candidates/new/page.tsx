@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
+import { SupabaseErrorCard } from "@/components/supabase-error-card";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { CandidateUploadForm } from "./candidate-upload-form";
 
@@ -21,14 +23,24 @@ export const dynamic = "force-dynamic";
 
 export default async function NewCandidatePage({ searchParams }: NewCandidatePageProps) {
   const { jobId } = await searchParams;
-  const supabase = createServerSupabaseClient();
-  const { data: jobs, error } = await supabase
-    .from("jobs")
-    .select("id, role_title, business_name")
-    .order("created_at", { ascending: false });
+  let jobs: SavedJobOption[] = [];
+  let loadError: string | null = null;
 
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const supabase = createServerSupabaseClient();
+    const result = await supabase
+      .from("jobs")
+      .select("id, role_title, business_name")
+      .order("created_at", { ascending: false });
+
+    if (result.error) {
+      loadError = result.error.message;
+    } else {
+      jobs = (result.data ?? []) as SavedJobOption[];
+    }
+  } catch (error) {
+    loadError = getSupabaseErrorMessage(error);
+    console.error("New candidate page failed to load jobs:", error);
   }
 
   return (
@@ -46,7 +58,11 @@ export default async function NewCandidatePage({ searchParams }: NewCandidatePag
         </Link>
       }
     >
-      <CandidateUploadForm jobs={(jobs ?? []) as SavedJobOption[]} selectedJobId={jobId} />
+      {loadError ? (
+        <SupabaseErrorCard message={loadError} />
+      ) : (
+        <CandidateUploadForm jobs={jobs} selectedJobId={jobId} />
+      )}
     </PageShell>
   );
 }

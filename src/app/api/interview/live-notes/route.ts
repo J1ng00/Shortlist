@@ -41,44 +41,51 @@ function appendUniqueNote(currentNotes: string[], note: string) {
 }
 
 export async function POST(request: Request) {
-  const { meetingNote, sessionId } = (await request.json()) as {
-    meetingNote?: string;
-    sessionId?: string;
-  };
-  const trimmedNote = meetingNote?.trim();
+  try {
+    const { meetingNote, sessionId } = (await request.json()) as {
+      meetingNote?: string;
+      sessionId?: string;
+    };
+    const trimmedNote = meetingNote?.trim();
 
-  if (!sessionId || !trimmedNote) {
-    return Response.json({ error: "sessionId and meetingNote are required." }, { status: 400 });
+    if (!sessionId || !trimmedNote) {
+      return Response.json({ error: "sessionId and meetingNote are required." }, { status: 400 });
+    }
+
+    const supabase = createServerSupabaseClient();
+    const { data: session, error: sessionError } = await supabase
+      .from("interview_sessions")
+      .select("id, ai_interview_output")
+      .eq("id", sessionId)
+      .maybeSingle();
+
+    if (sessionError) {
+      return Response.json({ error: sessionError.message }, { status: 500 });
+    }
+
+    if (!session) {
+      return Response.json({ error: "Interview session was not found." }, { status: 404 });
+    }
+
+    const output = normalizeSuggestions(session.ai_interview_output);
+    const nextOutput = {
+      ...output,
+      meetingNotes: appendUniqueNote(output.meetingNotes, trimmedNote)
+    };
+    const { error } = await supabase
+      .from("interview_sessions")
+      .update({ ai_interview_output: nextOutput })
+      .eq("id", sessionId);
+
+    if (error) {
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+
+    return Response.json({ data: nextOutput });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Unable to save live note." },
+      { status: 500 }
+    );
   }
-
-  const supabase = createServerSupabaseClient();
-  const { data: session, error: sessionError } = await supabase
-    .from("interview_sessions")
-    .select("id, ai_interview_output")
-    .eq("id", sessionId)
-    .maybeSingle();
-
-  if (sessionError) {
-    return Response.json({ error: sessionError.message }, { status: 500 });
-  }
-
-  if (!session) {
-    return Response.json({ error: "Interview session was not found." }, { status: 404 });
-  }
-
-  const output = normalizeSuggestions(session.ai_interview_output);
-  const nextOutput = {
-    ...output,
-    meetingNotes: appendUniqueNote(output.meetingNotes, trimmedNote)
-  };
-  const { error } = await supabase
-    .from("interview_sessions")
-    .update({ ai_interview_output: nextOutput })
-    .eq("id", sessionId);
-
-  if (error) {
-    return Response.json({ error: error.message }, { status: 500 });
-  }
-
-  return Response.json({ data: nextOutput });
 }

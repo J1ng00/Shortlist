@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing OPENAI_API_KEY." }, { status: 500 });
   }
 
+  try {
   const formData = await request.formData();
   const audio = formData.get("audio");
   const sessionId = formData.get("sessionId");
@@ -132,4 +133,10 @@ export async function POST(request: Request) {
     speaker,
     text: transcriptText
   });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Interview transcription failed." },
+      { status: 500 }
+    );
+  }
 }

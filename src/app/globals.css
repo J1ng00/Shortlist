@@ -89,7 +89,7 @@ textarea::placeholder {
 
 @layer base {
   body {
-    @apply text-navy;
+    color: var(--shortlist-ink);
   }
 }
 

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ArrowRight, BriefcaseBusiness, ClipboardList, FileText, MessageSquareText } from "lucide-react";
 
 import { PageShell } from "@/components/page-shell";
+import { SupabaseErrorCard } from "@/components/supabase-error-card";
 import { ButtonLink, Card, Pill } from "@/components/ui";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type CandidateAiOutput = {
@@ -82,15 +84,34 @@ const flow = [
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const supabase = createServerSupabaseClient();
-  const [{ data: candidates }, { count: jobCount }] = await Promise.all([
-    supabase
-      .from("candidates")
-      .select("id, full_name, current_position, ai_candidate_output, initial_fit_score, created_at, jobs(role_title, business_name)")
-      .order("created_at", { ascending: false })
-      .limit(5),
-    supabase.from("jobs").select("id", { count: "exact", head: true }),
-  ]);
+  let candidates: unknown[] = [];
+  let jobCount: number | null = 0;
+  let loadError: string | null = null;
+
+  try {
+    const supabase = createServerSupabaseClient();
+    const [candidateResult, jobCountResult] = await Promise.all([
+      supabase
+        .from("candidates")
+        .select("id, full_name, current_position, ai_candidate_output, initial_fit_score, created_at, jobs(role_title, business_name)")
+        .order("created_at", { ascending: false })
+        .limit(5),
+      supabase.from("jobs").select("id", { count: "exact", head: true }),
+    ]);
+
+    if (candidateResult.error) {
+      loadError = candidateResult.error.message;
+    } else if (jobCountResult.error) {
+      loadError = jobCountResult.error.message;
+    } else {
+      candidates = candidateResult.data ?? [];
+      jobCount = jobCountResult.count;
+    }
+  } catch (error) {
+    loadError = getSupabaseErrorMessage(error);
+    console.error("Home page failed to load Supabase data:", error);
+  }
+
   const recentCandidates = (candidates ?? []) as unknown as RecentCandidate[];
   const readyCount = recentCandidates.filter((candidate) => candidate.ai_candidate_output?.status === "ready").length;
 
@@ -106,6 +127,8 @@ export default async function Home() {
         </>
       }
     >
+      {loadError ? <SupabaseErrorCard message={loadError} /> : null}
+
       <div className="grid gap-4 md:grid-cols-2">
         <section className="animate-shortlist-in rounded-2xl border border-ink/20 bg-paper p-6 shadow-panel transition duration-300 hover:-translate-y-0.5 hover:shadow-strong">
           <div className="flex items-start justify-between gap-4">

@@ -260,6 +260,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "candidateId and sessionId are required." }, { status: 400 });
   }
 
+  try {
   const supabase = createServerSupabaseClient();
   const [{ data: session, error: sessionError }, { data: candidate, error: candidateError }] = await Promise.all([
     supabase.from("interview_sessions").select("id, notes, ai_interview_output").eq("id", sessionId).maybeSingle(),
@@ -400,5 +401,11 @@ export async function POST(request: Request) {
       source: "fallback",
       error: error instanceof Error ? error.message : "Unable to generate live suggestions."
     });
+  }
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Unable to load interview context." },
+      { status: 500 }
+    );
   }
 }

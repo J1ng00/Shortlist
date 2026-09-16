@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getOpenAIClient } from "@/lib/ai/openai-client";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -10,6 +10,33 @@ type RouteContext = {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+};
+
+type CandidateContext = {
+  ai_candidate_output?: {
+    evidence_snapshot?: unknown;
+    submitted_application?: {
+      github_url?: string | null;
+      linkedin_url?: string | null;
+      manual_profile_notes?: string | null;
+    };
+  };
+  created_at?: string;
+  current_position?: string | null;
+  email?: string | null;
+  full_name?: string | null;
+  github_url?: string | null;
+  id?: string;
+  initial_fit_score?: number | null;
+  jobs?: unknown;
+  linkedin_url?: string | null;
+  manual_profile_notes?: string | null;
+  phone?: string | null;
+  profile_notes?: string | null;
+  resume_file_path?: string | null;
+  resume_text?: string | null;
+  stage?: string | null;
+  updated_at?: string;
 };
 
 function isChatMessage(value: unknown): value is ChatMessage {
@@ -45,13 +72,29 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Missing OPENAI_API_KEY." }, { status: 500 });
   }
 
-  const { data: candidate, error } = await supabaseAdmin
-    .from("candidates")
-    .select("*, jobs(*)")
-    .eq("id", id)
-    .maybeSingle();
+  let candidate: CandidateContext | null = null;
 
-  if (error || !candidate) {
+  try {
+    const supabaseAdmin = createSupabaseAdminClient();
+    const result = await supabaseAdmin
+      .from("candidates")
+      .select("*, jobs(*)")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (result.error) {
+      return NextResponse.json({ error: "Candidate not found." }, { status: 404 });
+    }
+
+    candidate = result.data as CandidateContext | null;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to load candidate context." },
+      { status: 500 }
+    );
+  }
+
+  if (!candidate) {
     return NextResponse.json({ error: "Candidate not found." }, { status: 404 });
   }
 
